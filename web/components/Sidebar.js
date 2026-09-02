@@ -2,12 +2,13 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { get } from '../lib/api'
+import Icon from './Icon'
 
 const SERVICES = [
-  ['/new-call', 'Новий виклик', '📞'],
-  ['/reports', 'Звіти', '📄'],
-  ['/ai', 'AI-асистент', '🤖'],
-  ['/settings', 'Налаштування', '⚙️'],
+  ['/new-call', 'Новий виклик', 'call'],
+  ['/reports', 'Звіти', 'report'],
+  ['/ai', 'AI-асистент', 'ai'],
+  ['/settings', 'Налаштування', 'settings'],
 ]
 
 const GROUPS = [
@@ -32,20 +33,23 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <Link href="/" className="sidebar__logo">
-        <span className="sidebar__logo-icon">🚒</span> Пожежна частина
+        <Icon name="flame" size={17} /> Пожежна частина
       </Link>
 
       <nav className="sidebar__nav">
         <div className="sgroup">
           <div className="sgroup__title">Дані</div>
           <Link href="/" className={`slink${isActive('/') ? ' slink--active' : ''}`}>
-            <span className="slink__icon">📊</span> Огляд
+            <Icon name="dashboard" /> Огляд
           </Link>
           <Link href="/structure" className={`slink${isActive('/structure') ? ' slink--active' : ''}`}>
-            <span className="slink__icon">🕸</span> Структура
+            <Icon name="graph" /> Структура
           </Link>
           <Link href="/tables" className={`slink${pathname === '/tables' ? ' slink--active' : ''}`}>
-            <span className="slink__icon">📋</span> Усі таблиці
+            <Icon name="table" /> Усі таблиці
+          </Link>
+          <Link href="/kb" className={`slink${isActive('/kb') ? ' slink--active' : ''}`}>
+            <Icon name="kb" /> База знань
           </Link>
         </div>
 
@@ -76,7 +80,7 @@ export default function Sidebar() {
           <div className="sgroup__title">Сервіси</div>
           {SERVICES.map(([href, label, icon]) => (
             <Link key={href} href={href} className={`slink${isActive(href) ? ' slink--active' : ''}`}>
-              <span className="slink__icon">{icon}</span> {label}
+              <Icon name={icon} /> {label}
             </Link>
           ))}
         </div>

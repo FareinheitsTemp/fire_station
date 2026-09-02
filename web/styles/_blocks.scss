@@ -20,6 +20,18 @@
   }
 }
 
+// .icon — вбудовані SVG-іконки
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  svg {
+    display: block;
+  }
+}
+
 // .sidebar — ліва панель навігації
 .sidebar {
   width: 248px;
@@ -82,11 +94,6 @@
   &--active {
     background: #ececee;
     font-weight: 600;
-  }
-
-  &__icon {
-    width: 18px;
-    text-align: center;
   }
 
   &__dot {
@@ -369,6 +376,39 @@
   }
 }
 
+// .kb — картки бази знань
+.kb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+
+.kb-card {
+  border: 1px solid $border;
+  border-radius: $radius;
+  background: $bg;
+  box-shadow: $shadow;
+  padding: 14px 16px;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  &__line {
+    margin: 4px 0;
+    font-size: 14px;
+  }
+
+  &__actions {
+    margin-top: 10px;
+    text-align: right;
+  }
+}
+
 // .grid — таблиця даних у стилі Supabase
 .grid-wrap {
   overflow-x: auto;
@@ -430,7 +470,9 @@
 }
 
 .chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 1px 8px;
   border-radius: 6px;
   border: 1px solid $border;
@@ -481,6 +523,8 @@
   padding: 4px 9px;
   cursor: pointer;
   font-size: 13px;
+  display: inline-flex;
+  align-items: center;
 
   &:hover {
     background: $surface;
@@ -649,9 +693,14 @@
   width: 100%;
   height: auto;
   cursor: grab;
+  user-select: none;
 
   &:active {
     cursor: grabbing;
+  }
+
+  &__core {
+    cursor: grab;
   }
 
   &__core rect {
@@ -665,27 +714,35 @@
   }
 
   &__node {
-    cursor: pointer;
+    cursor: grab;
 
-    rect {
+    > rect {
       fill: $bg;
       stroke-width: 2;
     }
-
-    &:hover rect {
-      filter: brightness(0.96);
-    }
   }
 
-  &__label {
-    font-size: 13px;
-    font-weight: 600;
+  &__headtext {
+    fill: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  &__col {
+    font-size: 10.5px;
     fill: $text;
   }
 
-  &__name {
-    font-size: 11px;
+  &__type {
+    font-size: 10px;
     fill: $muted;
+    font-family: 'Cascadia Code', Consolas, monospace;
+  }
+
+  &__edgename {
+    font-size: 9.5px;
+    fill: $muted;
+    font-family: 'Cascadia Code', Consolas, monospace;
   }
 
   &__controls {
@@ -714,6 +771,17 @@
     fill: rgba(17, 24, 39, 0.06);
     stroke: $muted;
     stroke-width: 8;
+  }
+}
+
+.edge-handle {
+  fill: $bg;
+  stroke: $muted;
+  stroke-width: 1.5;
+  cursor: grab;
+
+  &:hover {
+    stroke: $text;
   }
 }
 
@@ -760,7 +828,7 @@
   font-weight: 600;
 }
 
-// .table (legacy, для результатів AI) — залишаємо простий варіант
+// .table (legacy, для результатів AI)
 .table-wrap {
   overflow-x: auto;
   border: 1px solid $border;

@@ -1,10 +1,12 @@
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { get } from '../lib/api'
+import Icon from './Icon'
 
 const NAMES = {
   tables: 'Таблиці',
   structure: 'Структура',
+  kb: 'База знань',
   'new-call': 'Новий виклик',
   reports: 'Звіти',
   ai: 'AI-асистент',
@@ -47,7 +49,7 @@ export default function Topbar() {
           {dbOK === null ? 'перевірка…' : dbOK ? 'БД підключено' : 'БД недоступна'}
         </span>
         <button className="icon-btn" title="Оновити сторінку" onClick={() => router.reload()}>
-          ⟳
+          <Icon name="refresh" size={14} />
         </button>
       </div>
     </header>

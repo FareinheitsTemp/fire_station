@@ -19,7 +19,7 @@ type TableMeta struct {
 	Label    string       `json:"label"`
 	PK       string       `json:"pk"`
 	LabelCol string       `json:"labelCol"`
-	Category string       `json:"category"` // core | staff | equipment | refs
+	Category string       `json:"category"` // core | staff | equipment | refs | knowledge
 	Color    string       `json:"color"`
 	Columns  []ColumnMeta `json:"columns"`
 }
@@ -94,6 +94,13 @@ var tablesMeta = []TableMeta{
 	{Name: "fire_types", Label: "Типи пожеж", PK: "id", LabelCol: "name", Category: "refs", Color: "#9333ea", Columns: []ColumnMeta{
 		{Name: "name", Label: "Назва", Type: "text", Required: true},
 		{Name: "risk_level", Label: "Рівень ризику", Type: "select", Options: []string{"низький", "середній", "високий"}},
+	}},
+	{Name: "kb_rules", Label: "База знань", PK: "id", LabelCol: "topic", Category: "knowledge", Color: "#65a30d", Columns: []ColumnMeta{
+		{Name: "topic", Label: "Тема правила", Type: "text", Required: true},
+		{Name: "category", Label: "Категорія", Type: "select", Options: []string{"реагування", "техніка", "персонал", "безпека"}},
+		{Name: "condition_text", Label: "Умова (якщо…)", Type: "text"},
+		{Name: "recommendation", Label: "Рекомендація (то…)", Type: "text"},
+		{Name: "priority", Label: "Пріоритет", Type: "select", Options: []string{"низький", "середній", "високий"}},
 	}},
 }
 

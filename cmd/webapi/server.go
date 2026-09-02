@@ -40,6 +40,8 @@ func Run(cfg *config.Config) error {
 		a.dbErr = err
 	} else if err = s.SeedDemo(); err != nil {
 		a.dbErr = err
+	} else if err = s.EnsureExtras(); err != nil {
+		a.dbErr = err
 	} else {
 		a.store = s
 	}
@@ -51,6 +53,8 @@ func Run(cfg *config.Config) error {
 	mux.HandleFunc("GET /api/recent", a.recent)
 	mux.HandleFunc("GET /api/meta", a.metaList)
 	mux.HandleFunc("GET /api/ref/{table}", a.refList)
+	mux.HandleFunc("GET /api/layout", a.getLayout)
+	mux.HandleFunc("PUT /api/layout", a.putLayout)
 	mux.HandleFunc("GET /api/tables", a.tables)
 	mux.HandleFunc("GET /api/tables/{name}", a.table)
 	mux.HandleFunc("POST /api/tables/{name}/rows", a.insertRow)
@@ -368,6 +372,37 @@ func (a *api) refList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// --- розкладка графа структури ---
+
+func (a *api) getLayout(w http.ResponseWriter, r *http.Request) {
+	if !a.dbOK(w) {
+		return
+	}
+	writeJSON(w, http.StatusOK, a.store.Layouts())
+}
+
+type layoutReq struct {
+	Node string  `json:"node"`
+	DX   float64 `json:"dx"`
+	DY   float64 `json:"dy"`
+}
+
+func (a *api) putLayout(w http.ResponseWriter, r *http.Request) {
+	if !a.dbOK(w) {
+		return
+	}
+	var req layoutReq
+	if !decode(w, r, &req) || strings.TrimSpace(req.Node) == "" {
+		writeErr(w, http.StatusBadRequest, "порожнє ім'я елемента")
+		return
+	}
+	if err := a.store.SaveLayout(req.Node, req.DX, req.DY); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 func (a *api) tables(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, db.TableNames())
 }
@@ -377,13 +412,7 @@ func (a *api) table(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	allowed := false
-	for _, n := range db.TableNames() {
-		if n == name {
-			allowed = true
-		}
-	}
-	if !allowed {
+	if _, ok := db.TableMetaByName(name); !ok {
 		writeErr(w, http.StatusNotFound, "невідома таблиця")
 		return
 	}
@@ -614,8 +643,20 @@ func (a *api) aiQuery(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
 
+	// Схема + база знань як контекст для ШІ
+	schemaDesc := db.SchemaDescription()
+	if rules, err := a.store.KnowledgeRules(ctx); err == nil && len(rules) > 0 {
+		var sb strings.Builder
+		sb.WriteString(schemaDesc)
+		sb.WriteString("\n\nБаза знань (правила реагування, для контексту):\n")
+		for _, r := range rules {
+			fmt.Fprintf(&sb, "- [%s] %s: якщо %s → %s\n", r.Priority, r.Topic, r.Condition, r.Recommendation)
+		}
+		schemaDesc = sb.String()
+	}
+
 	client := ai.NewClient(a.cfg.AIKey, a.cfg.AIModel)
-	sqlText, err := client.GenerateSQL(ctx, req.Question, db.SchemaDescription())
+	sqlText, err := client.GenerateSQL(ctx, req.Question, schemaDesc)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return

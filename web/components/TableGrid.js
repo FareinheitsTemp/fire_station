@@ -1,4 +1,5 @@
 import StatusBadge from './StatusBadge'
+import Icon from './Icon'
 
 const STATUS = new Set(['новий', 'в роботі', 'завершений', 'в строю', 'ремонт', 'списано', 'справно', 'несправно'])
 
@@ -6,14 +7,13 @@ const STATUS = new Set(['новий', 'в роботі', 'завершений',
 // PK-чип з копіюванням, FK-чипи кольору цільової гілки, статуси-бейджі.
 export default function TableGrid({ meta, refColors = {}, columns, rows, onEdit, onDelete }) {
   const cm = Object.fromEntries((meta?.columns || []).map((c) => [c.name, c]))
-  const pkIdx = meta ? columns.indexOf(meta.pk) : -1
 
   const cell = (col, val) => {
     const c = cm[col]
     if (meta && col === meta.pk) {
       return (
         <button className="chip chip--pk" title="Скопіювати ID" onClick={() => navigator.clipboard?.writeText(String(val))}>
-          {val} ⧉
+          {val} <Icon name="copy" size={11} />
         </button>
       )
     }
@@ -55,12 +55,12 @@ export default function TableGrid({ meta, refColors = {}, columns, rows, onEdit,
                 <td className="grid__actcol">
                   {onEdit && (
                     <button className="icon-btn" title="Редагувати" onClick={() => onEdit(row)}>
-                      ✏️
+                      <Icon name="edit" size={13} />
                     </button>
                   )}{' '}
                   {onDelete && (
                     <button className="icon-btn icon-btn--danger" title="Видалити" onClick={() => onDelete(row)}>
-                      🗑
+                      <Icon name="trash" size={13} />
                     </button>
                   )}
                 </td>
