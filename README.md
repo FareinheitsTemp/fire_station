@@ -2,7 +2,7 @@
 
 Курсова робота з дисципліни «Бази даних і знань»: автоматизована інформаційна система пожежної частини.
 
-Go (консольний API-сервер, міст до MS Access через ODBC) · React + Next.js + SCSS (BEM) — веб-інтерфейс · ШІ (будь-який OpenAI-сумісний API: Groq, aimlapi, Ollama) · PDF-звіти · база знань · автономний агент.
+Go (консольний API-сервер, міст до MS Access через ODBC) · React + Next.js + SCSS (BEM) — веб-інтерфейс · ШІ на Groq (OpenAI-сумісний API; за бажанням — локальний Ollama) · PDF-звіти · база знань · автономний агент.
 
 ## Архітектура
 
@@ -33,7 +33,7 @@ UI у стилі Supabase; власні SVG-іконки (без емоджі і
 3. Node.js 20+ — для фронтенду
 4. Microsoft Access Database Engine 2016 (або Office з Access)
 5. `DejaVuSans.ttf` у `assets/fonts/` (кирилиця в PDF)
-6. Ключ ШІ: безкоштовний [Groq](https://console.groq.com) (або aimlapi / локальний Ollama)
+6. Ключ ШІ: безкоштовний [Groq](https://console.groq.com)
 
 ## Запуск
 
@@ -45,7 +45,15 @@ go mod tidy; go build -o fire-station.exe .; ./fire-station.exe
 cd web; npm install; npm run dev
 ```
 
-Відкрити [http://localhost:3000](http://localhost:3000). Ключ ШІ, base URL і модель задаються на сторінці «Налаштування» (зберігаються локально у `~/.fire-station/config.yaml`, 0600, у репозиторій не потрапляють).
+Відкрити [http://localhost:3000](http://localhost:3000).
+
+## Налаштування ШІ
+
+Сторінка «Налаштування» (зберігається локально у `~/.fire-station/config.yaml`, 0600, у репозиторій не потрапляє):
+
+- **API ключ Groq** — `gsk_…`
+- **Base URL** — порожньо = дефолт Groq `https://api.groq.com/openai/v1` (для локальної моделі через Ollama: `http://localhost:11434/v1`)
+- **Модель** — `llama-3.3-70b-versatile` (дефолт); також production: `llama-3.1-8b-instant`, `openai/gpt-oss-120b`, `openai/gpt-oss-20b`
 
 ## Модель даних
 

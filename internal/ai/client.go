@@ -11,7 +11,14 @@ import (
 	"time"
 )
 
-// Client — універсальний клієнт OpenAI-сумісного API (Groq, aimlapi, Ollama тощо).
+// Дефолти — GroqCloud (OpenAI-сумісний endpoint).
+// Моделі за https://console.groq.com/docs/models
+const (
+	DefaultBaseURL = "https://api.groq.com/openai/v1"
+	DefaultModel   = "llama-3.3-70b-versatile"
+)
+
+// Client — універсальний клієнт OpenAI-сумісного API (Groq, локальний Ollama тощо).
 type Client struct {
 	baseURL string
 	apiKey  string
@@ -19,13 +26,13 @@ type Client struct {
 	http    *http.Client
 }
 
-// NewClient створює клієнта; порожній baseURL → aimlapi (зворотна сумісність).
+// NewClient створює клієнта; порожні baseURL/model → дефолти Groq.
 func NewClient(baseURL, apiKey, model string) *Client {
 	if baseURL == "" {
-		baseURL = "https://api.aimlapi.com/v1"
+		baseURL = DefaultBaseURL
 	}
 	if model == "" {
-		model = "openai/gpt-5-5"
+		model = DefaultModel
 	}
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),

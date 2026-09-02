@@ -50,16 +50,16 @@ export default function Settings() {
         <label className="form__label">Шрифт для PDF (TTF)</label>
         <input className="form__input" value={form.font_path} onChange={set('font_path')} />
 
-        <label className="form__label">API ключ ШІ</label>
+        <label className="form__label">API ключ Groq</label>
         <input
           className="form__input"
           type="password"
           value={form.ai_key}
           onChange={set('ai_key')}
-          placeholder={hasKey ? '•••••• (збережено; порожньо — лишити)' : 'gsk_… (Groq) або інший'}
+          placeholder={hasKey ? '•••••• (збережено; порожньо — лишити)' : 'gsk_…'}
         />
 
-        <label className="form__label">Base URL API (OpenAI-сумісний)</label>
+        <label className="form__label">Base URL API</label>
         <input
           className="form__input"
           value={form.ai_base_url}
@@ -67,7 +67,7 @@ export default function Settings() {
           placeholder="https://api.groq.com/openai/v1"
         />
         <p className="muted" style={{ margin: '2px 0 0', fontSize: 12.5 }}>
-          Groq: https://api.groq.com/openai/v1 · aimlapi: https://api.aimlapi.com/v1 · Ollama:
+          Порожньо — дефолт Groq (https://api.groq.com/openai/v1). Для локальної моделі через Ollama:
           http://localhost:11434/v1
         </p>
 
@@ -78,6 +78,10 @@ export default function Settings() {
           onChange={set('ai_model')}
           placeholder="llama-3.3-70b-versatile"
         />
+        <p className="muted" style={{ margin: '2px 0 0', fontSize: 12.5 }}>
+          Production-моделі Groq: llama-3.3-70b-versatile · llama-3.1-8b-instant · openai/gpt-oss-120b ·
+          openai/gpt-oss-20b
+        </p>
 
         <button className="btn" type="submit">
           Зберегти
