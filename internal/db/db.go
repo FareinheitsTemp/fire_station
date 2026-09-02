@@ -164,3 +164,60 @@ func (s *Store) CallsByPeriod(ctx context.Context, from, to time.Time) ([]report
 	}
 	return out, rows.Err()
 }
+
+// Stats — зведена статистика для дашборда.
+type Stats struct {
+	TotalCalls      int
+	TodayCalls      int
+	ActiveEmployees int
+	EquipmentOK     int
+}
+
+// Stats збирає лічильники для головної сторінки.
+func (s *Store) Stats(ctx context.Context) (Stats, error) {
+	var st Stats
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM calls").Scan(&st.TotalCalls); err != nil {
+		return st, err
+	}
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM calls WHERE call_at >= ?", today).Scan(&st.TodayCalls); err != nil {
+		return st, err
+	}
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM employees WHERE is_active = True").Scan(&st.ActiveEmployees); err != nil {
+		return st, err
+	}
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM equipment WHERE status = 'в строю'").Scan(&st.EquipmentOK); err != nil {
+		return st, err
+	}
+	return st, nil
+}
+
+// RecentCall — останній виклик для дашборда.
+type RecentCall struct {
+	CallAt  time.Time
+	Address string
+	Status  string
+}
+
+// RecentCalls повертає останні n викликів.
+func (s *Store) RecentCalls(ctx context.Context, n int) ([]RecentCall, error) {
+	rows, err := s.db.QueryContext(ctx,
+		fmt.Sprintf("SELECT TOP %d call_at, address, status FROM calls ORDER BY call_at DESC", n),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []RecentCall
+	for rows.Next() {
+		var rc RecentCall
+		if err := rows.Scan(&rc.CallAt, &rc.Address, &rc.Status); err != nil {
+			return nil, err
+		}
+		out = append(out, rc)
+	}
+	return out, rows.Err()
+}
