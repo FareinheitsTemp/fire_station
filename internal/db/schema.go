@@ -1,5 +1,7 @@
 package db
 
+import "fmt"
+
 // Схема БД у діалекті Access SQL (ACE):
 // COUNTER = автоінкремент, TEXT(n) = рядок, LONG = ціле, DOUBLE = дробове,
 // DATETIME = дата/час, YESNO = булеве, CURRENCY = гроші, LONGTEXT = memo.
