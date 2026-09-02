@@ -11,10 +11,10 @@ import (
 )
 
 func main() {
-	var cfgPath, flagDB, flagFont, flagAIKey, flagAIModel string
+	var flagDB, flagFont, flagAIKey, flagAIModel string
 
 	apply := func() *config.Config {
-		cfg, err := config.Load(cfgPath)
+		cfg, err := config.Load()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "config:", err)
 			os.Exit(1)
@@ -57,7 +57,6 @@ func main() {
 		},
 	}
 
-	root.PersistentFlags().StringVar(&cfgPath, "config", "", "шлях до конфіга")
 	root.PersistentFlags().StringVar(&flagDB, "db", "", "шлях до файлу БД (.accdb)")
 	root.PersistentFlags().StringVar(&flagFont, "font", "", "шлях до TTF-шрифту для PDF")
 	root.PersistentFlags().StringVar(&flagAIKey, "ai-key", "", "API ключ aimlapi")
