@@ -14,10 +14,13 @@ type Config struct {
 	FontPath  string `yaml:"font_path"`
 	AIKey     string `yaml:"ai_key"`
 	AIModel   string `yaml:"ai_model"`
-	AIBaseURL string `yaml:"ai_base_url"` // OpenAI-сумісний endpoint (Groq, aimlapi, Ollama…)
+	AIBaseURL string `yaml:"ai_base_url"` // OpenAI-сумісний endpoint (Groq, локальний Ollama…)
 
 	path string `yaml:"-"`
 }
+
+// Path повертає шлях до файла конфіга (для діагностики при старті).
+func (c *Config) Path() string { return c.path }
 
 func defaults() *Config {
 	home, _ := os.UserHomeDir()

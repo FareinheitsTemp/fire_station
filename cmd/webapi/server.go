@@ -64,6 +64,8 @@ func (l *errLog) snapshot() []errEntry {
 // Run піднімає БД і HTTP-сервер на 127.0.0.1:8080.
 func Run(cfg *config.Config) error {
 	a := &api{cfg: cfg, errs: &errLog{}}
+	printDiagnostics(cfg)
+
 	dbPath := exeRelative(cfg.DBPath)
 	if err := db.EnsureDatabase(dbPath); err != nil {
 		a.dbErr = err
@@ -110,6 +112,36 @@ func Run(cfg *config.Config) error {
 		fmt.Println("УВАГА: БД недоступна:", a.dbErr)
 	}
 	return http.ListenAndServe(addr, a.withLogging(withRecover(mux)))
+}
+
+// printDiagnostics друкує при старті: звідки конфіг, яка модель/endpoint, чи живий ключ.
+func printDiagnostics(cfg *config.Config) {
+	baseURL := cfg.AIBaseURL
+	if baseURL == "" {
+		baseURL = ai.DefaultBaseURL
+	}
+	model := cfg.AIModel
+	if model == "" {
+		model = ai.DefaultModel
+	}
+	keyHint := "НЕ ЗАДАНИЙ"
+	if len(cfg.AIKey) > 8 {
+		keyHint = cfg.AIKey[:4] + "…" + cfg.AIKey[len(cfg.AIKey)-4:]
+	}
+	log.Printf("Конфіг: %s", cfg.Path())
+	log.Printf("AI: %s | модель %s | ключ %s", baseURL, model, keyHint)
+
+	if cfg.AIKey == "" {
+		log.Println("AI-перевірка: пропущено (немає ключа)")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	if err := ai.NewClient(cfg.AIBaseURL, cfg.AIKey, cfg.AIModel).Ping(ctx); err != nil {
+		log.Printf("AI-перевірка: ПОМИЛКА — %v", err)
+	} else {
+		log.Println("AI-перевірка: OK (endpoint і ключ живі)")
+	}
 }
 
 // --- middleware ---

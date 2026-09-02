@@ -42,6 +42,29 @@ func NewClient(baseURL, apiKey, model string) *Client {
 	}
 }
 
+// BaseURL/Model — гетери для діагностики.
+func (c *Client) BaseURL() string { return c.baseURL }
+func (c *Client) Model() string   { return c.model }
+
+// Ping — швидка перевірка «ключ + endpoint живі» (GET /models).
+func (c *Client) Ping(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/models", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("недоступне: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(raw), 200))
+	}
+	return nil
+}
+
 // Message — повідомлення чату (role: system | user | assistant).
 type Message struct {
 	Role    string `json:"role"`
