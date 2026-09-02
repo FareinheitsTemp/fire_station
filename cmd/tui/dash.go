@@ -38,12 +38,12 @@ func (d *dashModel) Update(msg tea.Msg, s *db.Store) tea.Cmd {
 
 func (d *dashModel) View() string {
 	card := func(title string, value int) string {
-		v := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")).Render(fmt.Sprint(value))
+		v := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(clrText)).Render(fmt.Sprint(value))
 		return lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
+			BorderForeground(lipgloss.Color(clrCardBorder)).
 			Padding(0, 2).Width(24).
-			Render(title + "\n\n" + v)
+			Render(lipgloss.NewStyle().Foreground(lipgloss.Color(clrTextDim)).Render(title) + "\n\n" + v)
 	}
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top,
@@ -55,12 +55,12 @@ func (d *dashModel) View() string {
 
 	out := row + "\n\n" + lipgloss.NewStyle().Bold(true).Render("Останні виклики:") + "\n"
 	if len(d.recent) == 0 {
-		out += "  (поки порожньо)\n"
+		out += lipgloss.NewStyle().Foreground(lipgloss.Color(clrFaint)).Render("  (поки порожньо)") + "\n"
 	}
 	for _, rc := range d.recent {
 		out += fmt.Sprintf("  • %s — %s (%s)\n",
 			rc.CallAt.Format("02.01 15:04"), rc.Address, rc.Status)
 	}
-	out += "\n" + lipgloss.NewStyle().Faint(true).Render("r — оновити статистику")
+	out += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color(clrFaint)).Render("r — оновити статистику")
 	return out
 }

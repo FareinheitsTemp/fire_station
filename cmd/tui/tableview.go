@@ -31,12 +31,15 @@ func newTableView(title string, headers []string, data [][]string, height int) *
 	styles := table.DefaultStyles()
 	styles.Header = styles.Header.
 		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color(clrCardBorder)).
 		BorderBottom(true).
-		Bold(true)
+		Bold(true).
+		Foreground(lipgloss.Color(clrText))
 	styles.Selected = styles.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(true)
+		Foreground(lipgloss.Color(clrText)).
+		Background(lipgloss.Color(clrSelectedBg)).
+		Bold(false)
+	styles.Cell = styles.Cell.Foreground(lipgloss.Color("250"))
 	t.SetStyles(styles)
 
 	return &tableView{tbl: t, title: title}
@@ -49,7 +52,7 @@ func (v *tableView) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (v *tableView) View() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")).Render(v.title)
-	help := lipgloss.NewStyle().Faint(true).Render("↑/↓ — гортати • esc — назад")
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(clrText)).Render(v.title)
+	help := lipgloss.NewStyle().Foreground(lipgloss.Color(clrFaint)).Render("↑/↓ — гортати • esc — назад")
 	return title + "\n" + v.tbl.View() + "\n" + help
 }

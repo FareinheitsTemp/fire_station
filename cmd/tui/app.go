@@ -14,6 +14,24 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Стримана «службова» палітра:
+// 166 — приглушений помаранч (акцент, тема пожежної служби)
+// 238 — темно-сірий фон активних елементів
+// 255/250 — основний текст, 244/241 — другорядний текст
+// 24  — темно-синє тло вибраного рядка
+// 160 — приглушений червоний (помилки), 178 — бурштиновий (статуси)
+const (
+	clrAccent     = "166"
+	clrActiveBg   = "238"
+	clrText       = "255"
+	clrTextDim    = "244"
+	clrFaint      = "241"
+	clrSelectedBg = "24"
+	clrError      = "160"
+	clrStatus     = "178"
+	clrCardBorder = "240"
+)
+
 type page int
 
 const (
@@ -217,7 +235,7 @@ func (m *model) View() string {
 
 	switch {
 	case m.dbErr != nil:
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true).Render("БД недоступна"))
+		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(clrError)).Bold(true).Render("БД недоступна"))
 		b.WriteString("\n\n" + m.dbErr.Error() + "\n\n")
 		b.WriteString("Підказка: встанови Access Database Engine 2016\n")
 		b.WriteString("(https://www.microsoft.com/en-us/download/details.aspx?id=54920)\n")
@@ -236,14 +254,14 @@ func (m *model) View() string {
 }
 
 func (m *model) headerView() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("202")).Render("АІС «Пожежна частина»")
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(clrAccent)).Render("АІС «Пожежна частина»")
 	var tabs []string
 	for i, name := range pageNames {
 		style := lipgloss.NewStyle().Padding(0, 1)
 		if page(i) == m.page {
-			style = style.Bold(true).Foreground(lipgloss.Color("230")).Background(lipgloss.Color("162"))
+			style = style.Bold(true).Foreground(lipgloss.Color(clrText)).Background(lipgloss.Color(clrActiveBg))
 		} else {
-			style = style.Foreground(lipgloss.Color("245"))
+			style = style.Foreground(lipgloss.Color(clrTextDim))
 		}
 		tabs = append(tabs, style.Render(fmt.Sprintf("%d %s", i+1, name)))
 	}
@@ -251,9 +269,9 @@ func (m *model) headerView() string {
 }
 
 func (m *model) footerView() string {
-	help := lipgloss.NewStyle().Faint(true).Render("1–6 — сторінки • ←/→ — перемикання • esc — назад • q — вихід")
+	help := lipgloss.NewStyle().Foreground(lipgloss.Color(clrFaint)).Render("1–6 — сторінки • ←/→ — перемикання • esc — назад • q — вихід")
 	if m.status != "" {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(m.status) + "\n" + help
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(clrStatus)).Render(m.status) + "\n" + help
 	}
 	return help
 }
