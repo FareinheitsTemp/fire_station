@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -11,14 +10,16 @@ import (
 	"github.com/FareinheitsTemp/fire_station/internal/ai"
 	"github.com/FareinheitsTemp/fire_station/internal/db"
 	"github.com/FareinheitsTemp/fire_station/internal/report"
+	"github.com/charmbracelet/lipgloss"
 )
 
 var store *db.Store
 
 // runInteractive — головне меню програми (запуск exe без аргументів).
 func runInteractive() error {
-	fmt.Println("=== АІС «Пожежна частина» ===")
-	fmt.Printf("БД: %s | ШІ: %s\n\n", cfg.DBPath, statusOf(cfg.AIKey))
+	banner := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("202")).Render("=== АІС «Пожежна частина» ===")
+	fmt.Println(banner)
+	fmt.Printf("БД: %s | ШІ: %s\n\n", exeRelative(cfg.DBPath), statusOf(cfg.AIKey))
 
 	for {
 		var action string
@@ -56,14 +57,16 @@ func runInteractive() error {
 }
 
 // getStore ліниво відкриває БД: створює файл .accdb, схему та демо-дані за потреби.
+// Шлях до файлу рахується від теки, де лежить exe.
 func getStore() (*db.Store, error) {
 	if store != nil {
 		return store, nil
 	}
-	if err := db.EnsureDatabase(cfg.DBPath); err != nil {
+	dbPath := exeRelative(cfg.DBPath)
+	if err := db.EnsureDatabase(dbPath); err != nil {
 		return nil, err
 	}
-	s, err := db.Connect(cfg.DBPath)
+	s, err := db.Connect(dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -85,21 +88,27 @@ func menuDictionaries() {
 		fmt.Println("БД:", err)
 		return
 	}
-	var table string
+	var tableName string
 	if err := survey.AskOne(&survey.Select{
 		Message: "Яка таблиця?",
 		Options: db.TableNames(),
-	}, &table); err != nil {
+	}, &tableName); err != nil {
 		return
 	}
-	rows, err := s.Query(context.Background(), fmt.Sprintf("SELECT TOP 50 * FROM [%s]", table))
+	rows, err := s.Query(context.Background(), fmt.Sprintf("SELECT TOP 200 * FROM [%s]", tableName))
 	if err != nil {
 		fmt.Println("Запит:", err)
 		return
 	}
 	defer rows.Close()
-	if err := printRows(rows); err != nil {
+
+	headers, data, err := rowsToTable(rows)
+	if err != nil {
 		fmt.Println("Вивід:", err)
+		return
+	}
+	if err := showTable("Таблиця: "+tableName, headers, data); err != nil {
+		fmt.Println("TUI:", err)
 	}
 }
 
@@ -201,7 +210,7 @@ func menuReports() {
 		return
 	}
 
-	out, err := report.CallsByPeriodPDF(cfg.FontPath, "reports", from, to, rows)
+	out, err := report.CallsByPeriodPDF(exeRelative(cfg.FontPath), exeRelative("reports"), from, to, rows)
 	if err != nil {
 		fmt.Println("PDF:", err)
 		return
@@ -250,8 +259,14 @@ func menuAI() {
 		return
 	}
 	defer rows.Close()
-	if err := printRows(rows); err != nil {
+
+	headers, data, err := rowsToTable(rows)
+	if err != nil {
 		fmt.Println("Вивід:", err)
+		return
+	}
+	if err := showTable("[AI] Результат запиту", headers, data); err != nil {
+		fmt.Println("TUI:", err)
 	}
 }
 
@@ -284,69 +299,6 @@ func menuSettings() {
 		return
 	}
 	fmt.Println("Налаштування збережено. Наступні запуски підхоплять їх автоматично.")
-}
-
-// printRows друкує результат довільного SELECT у вигляді вирівняної таблиці.
-func printRows(rows *sql.Rows) error {
-	cols, err := rows.Columns()
-	if err != nil {
-		return err
-	}
-	vals := make([]any, len(cols))
-	ptrs := make([]any, len(cols))
-	for i := range vals {
-		ptrs[i] = &vals[i]
-	}
-
-	var head strings.Builder
-	for _, c := range cols {
-		head.WriteString(pad(c, 20))
-	}
-	fmt.Println(head.String())
-	fmt.Println(strings.Repeat("-", 20*len(cols)))
-
-	n := 0
-	for rows.Next() {
-		if err := rows.Scan(ptrs...); err != nil {
-			return err
-		}
-		var line strings.Builder
-		for _, v := range vals {
-			line.WriteString(pad(cellText(v), 20))
-		}
-		fmt.Println(line.String())
-		n++
-	}
-	if n == 0 {
-		fmt.Println("(порожньо)")
-	}
-	return rows.Err()
-}
-
-func cellText(v any) string {
-	switch t := v.(type) {
-	case nil:
-		return "NULL"
-	case []byte:
-		return string(t)
-	case time.Time:
-		return t.Format("02.01.2006 15:04")
-	case bool:
-		if t {
-			return "так"
-		}
-		return "ні"
-	default:
-		return fmt.Sprint(t)
-	}
-}
-
-func pad(s string, w int) string {
-	r := []rune(s)
-	if len(r) > w-1 {
-		r = r[:w-1]
-	}
-	return fmt.Sprintf("%-*s", w, string(r))
 }
 
 func statusOf(v string) string {
