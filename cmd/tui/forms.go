@@ -7,6 +7,7 @@ import (
 
 	"github.com/FareinheitsTemp/fire_station/internal/db"
 	"github.com/FareinheitsTemp/fire_station/internal/report"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 )
 
@@ -19,16 +20,16 @@ func (m *model) formWidth() int {
 	return w
 }
 
-// openNewCallForm — форма реєстрації виклику.
-func (m *model) openNewCallForm() {
+// openNewCallForm — форма реєстрації виклику. Повертає Init-команду форми.
+func (m *model) openNewCallForm() tea.Cmd {
 	if m.store == nil {
 		m.status = "БД недоступна"
-		return
+		return nil
 	}
 	types, err := m.store.FireTypes()
 	if err != nil || len(types) == 0 {
 		m.status = "Довідник типів пожеж порожній"
-		return
+		return nil
 	}
 	opts := make([]huh.Option[string], len(types))
 	for i, t := range types {
@@ -63,13 +64,14 @@ func (m *model) openNewCallForm() {
 		m.status = fmt.Sprintf("Виклик №%d зареєстровано о %s", id, time.Now().Format("15:04 02.01.2006"))
 		m.dash.Refresh(m.store)
 	}
+	return m.form.Init()
 }
 
 // openReportForm — форма генерації PDF-звіту за період.
-func (m *model) openReportForm() {
+func (m *model) openReportForm() tea.Cmd {
 	if m.store == nil {
 		m.status = "БД недоступна"
-		return
+		return nil
 	}
 	now := time.Now()
 	first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local)
@@ -106,17 +108,18 @@ func (m *model) openReportForm() {
 		}
 		m.status = "PDF збережено: " + out
 	}
+	return m.form.Init()
 }
 
 // openAIForm — форма запиту до AI-асистента.
-func (m *model) openAIForm() {
+func (m *model) openAIForm() tea.Cmd {
 	if m.store == nil {
 		m.status = "БД недоступна"
-		return
+		return nil
 	}
 	if m.cfg.AIKey == "" {
 		m.status = "Немає AI-ключа — спочатку Налаштування (клавіша 6)"
-		return
+		return nil
 	}
 	var question string
 	m.form = huh.NewForm(huh.NewGroup(
@@ -132,10 +135,11 @@ func (m *model) openAIForm() {
 		m.status = "[AI] Формую SQL і виконую запит..."
 		m.pendingCmd = m.runAI(question)
 	}
+	return m.form.Init()
 }
 
 // openSettingsForm — форма налаштувань (зберігається у конфіг 0600).
-func (m *model) openSettingsForm() {
+func (m *model) openSettingsForm() tea.Cmd {
 	dbPath := m.cfg.DBPath
 	fontPath := m.cfg.FontPath
 	aiKey := ""
@@ -161,4 +165,5 @@ func (m *model) openSettingsForm() {
 		}
 		m.status = "Налаштування збережено (якщо змінено шлях БД — перезапусти програму)"
 	}
+	return m.form.Init()
 }

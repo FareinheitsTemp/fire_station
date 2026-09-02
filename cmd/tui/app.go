@@ -47,7 +47,7 @@ type model struct {
 	dash   *dashModel
 	tables *tablesModel
 
-	form       tea.Model // активна huh-форма
+	form       *huh.Form // активна huh-форма
 	onDone     func()    // дія після завершення форми
 	pendingCmd tea.Cmd   // асинхронна дія (AI-запит)
 	result     *tableView
@@ -85,6 +85,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
+		if m.form != nil {
+			var c tea.Cmd
+			m.form, c = m.updateForm(msg)
+			return m, c
+		}
 		return m, nil
 
 	case aiResultMsg:
@@ -97,19 +102,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Глобальний вихід — завжди, навіть поверх форм
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+
 		// 1. Активна форма: esc — скасувати, решта клавіш — формі
 		if m.form != nil {
 			if msg.String() == "esc" {
-				m.form = nil
-				m.onDone = nil
+				m.closeForm()
 				return m, nil
 			}
 			var c tea.Cmd
-			m.form, c = m.form.Update(msg)
-			if f, ok := m.form.(*huh.Form); ok && f.State == huh.StateCompleted {
+			m.form, c = m.updateForm(msg)
+			switch m.form.State {
+			case huh.StateCompleted:
 				done := m.onDone
-				m.form = nil
-				m.onDone = nil
+				m.closeForm()
 				if done != nil {
 					done()
 				}
@@ -118,6 +127,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.pendingCmd = nil
 					return m, pc
 				}
+			case huh.StateAborted:
+				m.closeForm()
 			}
 			return m, c
 		}
@@ -133,24 +144,24 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// 3. Глобальна навігація
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "q":
 			return m, tea.Quit
 		case "1":
-			m.enterPage(pageDash)
+			return m, m.enterPage(pageDash)
 		case "2":
-			m.enterPage(pageTables)
+			return m, m.enterPage(pageTables)
 		case "3":
-			m.enterPage(pageNewCall)
+			return m, m.enterPage(pageNewCall)
 		case "4":
-			m.enterPage(pageReports)
+			return m, m.enterPage(pageReports)
 		case "5":
-			m.enterPage(pageAI)
+			return m, m.enterPage(pageAI)
 		case "6":
-			m.enterPage(pageSettings)
+			return m, m.enterPage(pageSettings)
 		case "right", "l":
-			m.enterPage((m.page + 1) % page(len(pageNames)))
+			return m, m.enterPage((m.page + 1) % page(len(pageNames)))
 		case "left", "h":
-			m.enterPage((m.page + page(len(pageNames)) - 1) % page(len(pageNames)))
+			return m, m.enterPage((m.page + page(len(pageNames)) - 1) % page(len(pageNames)))
 		default:
 			switch m.page {
 			case pageDash:
@@ -163,22 +174,40 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// enterPage переходить на сторінку; для сторінок-форм відкриває форму.
-func (m *model) enterPage(p page) {
+// updateForm делегує повідомлення формі (huh Update міняє receiver-стан).
+func (m *model) updateForm(msg tea.Msg) (*huh.Form, tea.Cmd) {
+	fm, c := m.form.Update(msg)
+	if f, ok := fm.(*huh.Form); ok {
+		return f, c
+	}
+	return m.form, c
+}
+
+// closeForm скидає стан активної форми.
+func (m *model) closeForm() {
+	m.form = nil
+	m.onDone = nil
+	m.pendingCmd = nil
+}
+
+// enterPage переходить на сторінку; для сторінок-форм створює форму й
+// повертає її Init-команду (фокус першого поля, блінк курсора).
+func (m *model) enterPage(p page) tea.Cmd {
 	m.page = p
 	m.status = ""
 	switch p {
 	case pageDash:
 		m.dash.Refresh(m.store)
 	case pageNewCall:
-		m.openNewCallForm()
+		return m.openNewCallForm()
 	case pageReports:
-		m.openReportForm()
+		return m.openReportForm()
 	case pageAI:
-		m.openAIForm()
+		return m.openAIForm()
 	case pageSettings:
-		m.openSettingsForm()
+		return m.openSettingsForm()
 	}
+	return nil
 }
 
 func (m *model) View() string {
