@@ -8,19 +8,9 @@ import (
 	"github.com/FareinheitsTemp/fire_station/internal/db"
 	"github.com/FareinheitsTemp/fire_station/internal/report"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 )
 
-// formWidth підбирає ширину форми за розміром термінала.
-func (m *model) formWidth() int {
-	w := m.width - 4
-	if w < 50 {
-		w = 70
-	}
-	return w
-}
-
-// openNewCallForm — форма реєстрації виклику. Повертає Init-команду форми.
+// openNewCallForm — форма реєстрації виклику на власному компоненті.
 func (m *model) openNewCallForm() tea.Cmd {
 	if m.store == nil {
 		m.status = "БД недоступна"
@@ -31,31 +21,40 @@ func (m *model) openNewCallForm() tea.Cmd {
 		m.status = "Довідник типів пожеж порожній"
 		return nil
 	}
-	opts := make([]huh.Option[string], len(types))
+	typeNames := make([]string, len(types))
+	typeIDs := make([]int64, len(types))
 	for i, t := range types {
-		opts[i] = huh.NewOption(t.Name, fmt.Sprint(t.ID))
+		typeNames[i] = t.Name
+		typeIDs[i] = t.ID
 	}
 
-	var address, district, caller, phone, descr, typeID string
-	m.form = huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Адреса виклику").Value(&address),
-		huh.NewInput().Title("Район").Value(&district),
-		huh.NewSelect[string]().Title("Тип пожежі").Options(opts...).Value(&typeID),
-		huh.NewInput().Title("Заявник (ПІБ)").Value(&caller),
-		huh.NewInput().Title("Телефон заявника").Value(&phone),
-		huh.NewInput().Title("Опис ситуації").Value(&descr),
-	)).WithWidth(m.formWidth())
+	f, cmd := newSimpleForm("Новий виклик", []formField{
+		newTextField("Адреса виклику", "вул. Соборна, 12", false),
+		newTextField("Район", "Замостянський", false),
+		newSelectField("Тип пожежі", typeNames),
+		newTextField("Заявник (ПІБ)", "", false),
+		newTextField("Телефон заявника", "067...", false),
+		newTextField("Опис ситуації", "", false),
+	})
+	m.form = f
 
 	m.onDone = func() {
+		address := f.value(0)
 		if address == "" {
 			m.status = "Адреса порожня — виклик не збережено"
 			return
 		}
 		var tid int64
-		fmt.Sscan(typeID, &tid)
+		if sel := f.value(2); sel != "" {
+			for i, name := range typeNames {
+				if name == sel {
+					tid = typeIDs[i]
+				}
+			}
+		}
 		id, err := m.store.CreateCall(db.CallInput{
-			Address: address, District: district, CallerName: caller,
-			CallerPhone: phone, FireTypeID: tid, Description: descr,
+			Address: address, District: f.value(1), CallerName: f.value(3),
+			CallerPhone: f.value(4), FireTypeID: tid, Description: f.value(5),
 		})
 		if err != nil {
 			m.status = "Помилка запису: " + err.Error()
@@ -64,7 +63,7 @@ func (m *model) openNewCallForm() tea.Cmd {
 		m.status = fmt.Sprintf("Виклик №%d зареєстровано о %s", id, time.Now().Format("15:04 02.01.2006"))
 		m.dash.Refresh(m.store)
 	}
-	return m.form.Init()
+	return cmd
 }
 
 // openReportForm — форма генерації PDF-звіту за період.
@@ -75,17 +74,18 @@ func (m *model) openReportForm() tea.Cmd {
 	}
 	now := time.Now()
 	first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local)
-	fromStr := first.Format("2006-01-02")
-	toStr := now.Format("2006-01-02")
 
-	m.form = huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("З дати (РРРР-ММ-ДД)").Value(&fromStr),
-		huh.NewInput().Title("По дату (РРРР-ММ-ДД)").Value(&toStr),
-	)).WithWidth(m.formWidth())
+	f, cmd := newSimpleForm("Звіт «Виклики за період» (PDF)", []formField{
+		newTextField("З дати (РРРР-ММ-ДД)", "2026-09-01", false),
+		newTextField("По дату (РРРР-ММ-ДД)", "2026-09-30", false),
+	})
+	f.setValue(0, first.Format("2006-01-02"))
+	f.setValue(1, now.Format("2006-01-02"))
+	m.form = f
 
 	m.onDone = func() {
-		from, err1 := time.ParseInLocation("2006-01-02", fromStr, time.Local)
-		to, err2 := time.ParseInLocation("2006-01-02", toStr, time.Local)
+		from, err1 := time.ParseInLocation("2006-01-02", f.value(0), time.Local)
+		to, err2 := time.ParseInLocation("2006-01-02", f.value(1), time.Local)
 		if err1 != nil || err2 != nil {
 			m.status = "Невірний формат дати (приклад: 2026-09-01)"
 			return
@@ -108,7 +108,7 @@ func (m *model) openReportForm() tea.Cmd {
 		}
 		m.status = "PDF збережено: " + out
 	}
-	return m.form.Init()
+	return cmd
 }
 
 // openAIForm — форма запиту до AI-асистента.
@@ -121,49 +121,47 @@ func (m *model) openAIForm() tea.Cmd {
 		m.status = "Немає AI-ключа — спочатку Налаштування (клавіша 6)"
 		return nil
 	}
-	var question string
-	m.form = huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Питання до даних українською").
-			Placeholder("наприклад: скільки викликів по районах цього місяця").
-			Value(&question),
-	)).WithWidth(m.formWidth())
+	f, cmd := newSimpleForm("AI-асистент", []formField{
+		newTextField("Питання до даних українською", "скільки викликів по районах цього місяця", false),
+	})
+	m.form = f
 
 	m.onDone = func() {
+		question := f.value(0)
 		if question == "" {
 			return
 		}
 		m.status = "[AI] Формую SQL і виконую запит..."
 		m.pendingCmd = m.runAI(question)
 	}
-	return m.form.Init()
+	return cmd
 }
 
 // openSettingsForm — форма налаштувань (зберігається у конфіг 0600).
 func (m *model) openSettingsForm() tea.Cmd {
-	dbPath := m.cfg.DBPath
-	fontPath := m.cfg.FontPath
-	aiKey := ""
-	aiModel := m.cfg.AIModel
-
-	m.form = huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Шлях до БД (.accdb)").Value(&dbPath),
-		huh.NewInput().Title("Шрифт для PDF (TTF)").Value(&fontPath),
-		huh.NewInput().Title("API ключ ШІ aimlapi (порожньо — лишити)").Value(&aiKey).Password(true),
-		huh.NewInput().Title("Модель ШІ").Value(&aiModel),
-	)).WithWidth(m.formWidth())
+	f, cmd := newSimpleForm("Налаштування", []formField{
+		newTextField("Шлях до БД (.accdb)", "data/fire_station.accdb", false),
+		newTextField("Шрифт для PDF (TTF)", "assets/fonts/DejaVuSans.ttf", false),
+		newTextField("API ключ ШІ aimlapi (порожньо — лишити)", "введи ключ", true),
+		newTextField("Модель ШІ", "openai/gpt-5-5", false),
+	})
+	f.setValue(0, m.cfg.DBPath)
+	f.setValue(1, m.cfg.FontPath)
+	f.setValue(3, m.cfg.AIModel)
+	m.form = f
 
 	m.onDone = func() {
-		m.cfg.DBPath = dbPath
-		m.cfg.FontPath = fontPath
-		if aiKey != "" {
-			m.cfg.AIKey = aiKey
+		m.cfg.DBPath = f.value(0)
+		m.cfg.FontPath = f.value(1)
+		if key := f.value(2); key != "" {
+			m.cfg.AIKey = key
 		}
-		m.cfg.AIModel = aiModel
+		m.cfg.AIModel = f.value(3)
 		if err := m.cfg.Save(); err != nil {
 			m.status = "Збереження: " + err.Error()
 			return
 		}
 		m.status = "Налаштування збережено (якщо змінено шлях БД — перезапусти програму)"
 	}
-	return m.form.Init()
+	return cmd
 }

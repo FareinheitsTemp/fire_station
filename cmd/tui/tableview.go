@@ -7,6 +7,7 @@ import (
 )
 
 // tableView — повноекранна інтерактивна таблиця зі скролом.
+// Монохром: вибраний рядок — інверсія кольорів (чорне на білому).
 type tableView struct {
 	tbl   table.Model
 	title string
@@ -31,15 +32,10 @@ func newTableView(title string, headers []string, data [][]string, height int) *
 	styles := table.DefaultStyles()
 	styles.Header = styles.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(clrCardBorder)).
+		BorderForeground(lipgloss.Color(clrDim)).
 		BorderBottom(true).
-		Bold(true).
-		Foreground(lipgloss.Color(clrText))
-	styles.Selected = styles.Selected.
-		Foreground(lipgloss.Color(clrText)).
-		Background(lipgloss.Color(clrSelectedBg)).
-		Bold(false)
-	styles.Cell = styles.Cell.Foreground(lipgloss.Color("250"))
+		Bold(true)
+	styles.Selected = lipgloss.NewStyle().Reverse(true)
 	t.SetStyles(styles)
 
 	return &tableView{tbl: t, title: title}
@@ -52,7 +48,7 @@ func (v *tableView) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (v *tableView) View() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(clrText)).Render(v.title)
+	title := lipgloss.NewStyle().Bold(true).Render(v.title)
 	help := lipgloss.NewStyle().Foreground(lipgloss.Color(clrFaint)).Render("↑/↓ — гортати • esc — назад")
 	return title + "\n" + v.tbl.View() + "\n" + help
 }

@@ -37,20 +37,29 @@ func (d *dashModel) Update(msg tea.Msg, s *db.Store) tea.Cmd {
 }
 
 func (d *dashModel) View() string {
-	card := func(title string, value int) string {
-		v := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(clrText)).Render(fmt.Sprint(value))
+	card := func(title string, value string) string {
 		return lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(clrCardBorder)).
+			BorderForeground(lipgloss.Color(clrDim)).
 			Padding(0, 2).Width(24).
-			Render(lipgloss.NewStyle().Foreground(lipgloss.Color(clrTextDim)).Render(title) + "\n\n" + v)
+			Render(lipgloss.NewStyle().Foreground(lipgloss.Color(clrDim)).Render(title) + "\n\n" +
+				lipgloss.NewStyle().Bold(true).Render(value))
 	}
 
+	// Семантичний колір для картки техніки: зелений, якщо все в строю
+	eqValue := fmt.Sprint(d.stats.EquipmentOK)
+	eqColored := lipgloss.NewStyle().Foreground(lipgloss.Color(clrOK)).Render(eqValue)
+	eqCard := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(clrDim)).
+		Padding(0, 2).Width(24).
+		Render(lipgloss.NewStyle().Foreground(lipgloss.Color(clrDim)).Render("Техніки в строю") + "\n\n" + eqColored)
+
 	row := lipgloss.JoinHorizontal(lipgloss.Top,
-		card("Викликів усього", d.stats.TotalCalls), "  ",
-		card("Викликів сьогодні", d.stats.TodayCalls), "  ",
-		card("Працівників активно", d.stats.ActiveEmployees), "  ",
-		card("Техніки в строю", d.stats.EquipmentOK),
+		card("Викликів усього", fmt.Sprint(d.stats.TotalCalls)), "  ",
+		card("Викликів сьогодні", fmt.Sprint(d.stats.TodayCalls)), "  ",
+		card("Працівників активно", fmt.Sprint(d.stats.ActiveEmployees)), "  ",
+		eqCard,
 	)
 
 	out := row + "\n\n" + lipgloss.NewStyle().Bold(true).Render("Останні виклики:") + "\n"
@@ -59,8 +68,23 @@ func (d *dashModel) View() string {
 	}
 	for _, rc := range d.recent {
 		out += fmt.Sprintf("  • %s — %s (%s)\n",
-			rc.CallAt.Format("02.01 15:04"), rc.Address, rc.Status)
+			rc.CallAt.Format("02.01 15:04"), rc.Address, statusColored(rc.Status))
 	}
 	out += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color(clrFaint)).Render("r — оновити статистику")
 	return out
+}
+
+// statusColored — семантичні кольори статусів:
+// зелений — завершено, жовтий — в роботі, червоний — новий/критичний.
+func statusColored(status string) string {
+	switch status {
+	case "завершений":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(clrOK)).Render(status)
+	case "в роботі", "ремонт":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(clrWarn)).Render(status)
+	case "новий":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(clrError)).Render(status)
+	default:
+		return status
+	}
 }

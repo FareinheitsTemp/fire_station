@@ -10,26 +10,21 @@ import (
 	"github.com/FareinheitsTemp/fire_station/internal/config"
 	"github.com/FareinheitsTemp/fire_station/internal/db"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Стримана «службова» палітра:
-// 166 — приглушений помаранч (акцент, тема пожежної служби)
-// 238 — темно-сірий фон активних елементів
-// 255/250 — основний текст, 244/241 — другорядний текст
-// 24  — темно-синє тло вибраного рядка
-// 160 — приглушений червоний (помилки), 178 — бурштиновий (статуси)
+// Монохромна палітра: все біле/сіре. Колір — лише для семантики станів:
+// 42  — зелений (OK, «в строю», «завершений»)
+// 178 — жовтий (статуси, «в роботі», «ремонт»)
+// 160 — червоний (помилки, «новий виклик», «недоступно»)
 const (
-	clrAccent     = "166"
-	clrActiveBg   = "238"
-	clrText       = "255"
-	clrTextDim    = "244"
-	clrFaint      = "241"
-	clrSelectedBg = "24"
-	clrError      = "160"
-	clrStatus     = "178"
-	clrCardBorder = "240"
+	clrText   = "255"
+	clrDim    = "244"
+	clrFaint  = "241"
+	clrOK     = "42"
+	clrWarn   = "178"
+	clrError  = "160"
+	clrStatus = "178"
 )
 
 type page int
@@ -65,9 +60,9 @@ type model struct {
 	dash   *dashModel
 	tables *tablesModel
 
-	form       *huh.Form // активна huh-форма
-	onDone     func()    // дія після завершення форми
-	pendingCmd tea.Cmd   // асинхронна дія (AI-запит)
+	form       *simpleForm // активна форма (власний компонент)
+	onDone     func()      // дія після submit форми
+	pendingCmd tea.Cmd     // асинхронна дія (AI-запит)
 	result     *tableView
 }
 
@@ -103,11 +98,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
-		if m.form != nil {
-			var c tea.Cmd
-			m.form, c = m.updateForm(msg)
-			return m, c
-		}
 		return m, nil
 
 	case aiResultMsg:
@@ -120,21 +110,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// Глобальний вихід — завжди, навіть поверх форм
+		// Глобальний вихід — завжди, поверх усього
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
 
-		// 1. Активна форма: esc — скасувати, решта клавіш — формі
+		// 1. Активна форма — всі клавиші їй
 		if m.form != nil {
-			if msg.String() == "esc" {
+			c := m.form.Update(msg)
+			if m.form.cancelled {
 				m.closeForm()
 				return m, nil
 			}
-			var c tea.Cmd
-			m.form, c = m.updateForm(msg)
-			switch m.form.State {
-			case huh.StateCompleted:
+			if m.form.submitted {
 				done := m.onDone
 				m.closeForm()
 				if done != nil {
@@ -145,8 +133,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.pendingCmd = nil
 					return m, pc
 				}
-			case huh.StateAborted:
-				m.closeForm()
+				return m, nil
 			}
 			return m, c
 		}
@@ -192,15 +179,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// updateForm делегує повідомлення формі (huh Update міняє receiver-стан).
-func (m *model) updateForm(msg tea.Msg) (*huh.Form, tea.Cmd) {
-	fm, c := m.form.Update(msg)
-	if f, ok := fm.(*huh.Form); ok {
-		return f, c
-	}
-	return m.form, c
-}
-
 // closeForm скидає стан активної форми.
 func (m *model) closeForm() {
 	m.form = nil
@@ -208,8 +186,7 @@ func (m *model) closeForm() {
 	m.pendingCmd = nil
 }
 
-// enterPage переходить на сторінку; для сторінок-форм створює форму й
-// повертає її Init-команду (фокус першого поля, блінк курсора).
+// enterPage переходить на сторінку; для сторінок-форм створює форму.
 func (m *model) enterPage(p page) tea.Cmd {
 	m.page = p
 	m.status = ""
@@ -254,14 +231,12 @@ func (m *model) View() string {
 }
 
 func (m *model) headerView() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(clrAccent)).Render("АІС «Пожежна частина»")
+	title := lipgloss.NewStyle().Bold(true).Render("АІС «Пожежна частина»")
 	var tabs []string
 	for i, name := range pageNames {
-		style := lipgloss.NewStyle().Padding(0, 1)
+		style := lipgloss.NewStyle().Padding(0, 1).Foreground(lipgloss.Color(clrDim))
 		if page(i) == m.page {
-			style = style.Bold(true).Foreground(lipgloss.Color(clrText)).Background(lipgloss.Color(clrActiveBg))
-		} else {
-			style = style.Foreground(lipgloss.Color(clrTextDim))
+			style = style.Bold(true).Underline(true).Foreground(lipgloss.Color(clrText))
 		}
 		tabs = append(tabs, style.Render(fmt.Sprintf("%d %s", i+1, name)))
 	}

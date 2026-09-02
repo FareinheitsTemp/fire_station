@@ -74,9 +74,9 @@ func (t *tablesModel) View() string {
 	out := lipgloss.NewStyle().Bold(true).Render("Таблиці бази даних:") + "\n\n"
 	for i, name := range t.names {
 		if i == t.idx {
-			out += lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(clrText)).Background(lipgloss.Color(clrActiveBg)).Render(" "+name+" ") + "\n"
+			out += lipgloss.NewStyle().Bold(true).Reverse(true).Render(" "+name+" ") + "\n"
 		} else {
-			out += lipgloss.NewStyle().Foreground(lipgloss.Color(clrTextDim)).Render("  "+name) + "\n"
+			out += lipgloss.NewStyle().Foreground(lipgloss.Color(clrDim)).Render("  "+name) + "\n"
 		}
 	}
 	if t.err != "" {
