@@ -1,0 +1,287 @@
+// BEM-блоки інтерфейсу.
+
+// .layout — каркас: сайдбар + контент
+.layout {
+  display: flex;
+  min-height: 100vh;
+
+  &__sidebar {
+    width: 230px;
+    flex-shrink: 0;
+    border-right: 1px solid $border;
+    padding: 24px 16px;
+  }
+
+  &__logo {
+    font-weight: 700;
+    margin-bottom: 24px;
+  }
+
+  &__content {
+    flex: 1;
+    padding: 32px 40px;
+    max-width: 1100px;
+  }
+}
+
+// .nav — меню в сайдбарі
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  &__link {
+    padding: 8px 12px;
+    border-radius: $radius;
+    color: $muted;
+    border-left: 3px solid transparent;
+
+    &:hover {
+      background: $surface;
+      color: $text;
+    }
+
+    &--active {
+      color: $text;
+      font-weight: 600;
+      border-left-color: $text;
+      background: $surface;
+    }
+  }
+}
+
+// .page — сторінка
+.page {
+  &__title {
+    margin: 0 0 20px;
+    font-size: 24px;
+  }
+
+  &__subtitle {
+    margin: 28px 0 12px;
+    font-size: 17px;
+  }
+}
+
+// .cards + .card — картки статистики
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.card {
+  border: 1px solid $border;
+  border-radius: $radius;
+  padding: 16px 18px;
+  background: $surface;
+
+  &__title {
+    color: $muted;
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+
+  &__value {
+    font-size: 28px;
+    font-weight: 700;
+  }
+
+  &--ok .card__value {
+    color: $ok;
+  }
+}
+
+// .recent — список останніх викликів
+.recent {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid $border;
+  }
+
+  &__date {
+    color: $muted;
+    min-width: 110px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__address {
+    flex: 1;
+  }
+}
+
+// .badge — статус (семантичні кольори)
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid $border;
+  font-size: 13px;
+
+  &--ok {
+    color: $ok;
+    border-color: $ok;
+    background: $ok-bg;
+  }
+
+  &--warn {
+    color: $warn;
+    border-color: $warn;
+    background: $warn-bg;
+  }
+
+  &--err {
+    color: $err;
+    border-color: $err;
+    background: $err-bg;
+  }
+}
+
+// .table-list — список таблиць БД
+.table-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 420px;
+
+  &__item {
+    padding: 10px 14px;
+    border: 1px solid $border;
+    border-radius: $radius;
+
+    &:hover {
+      background: $surface;
+      font-weight: 600;
+    }
+  }
+}
+
+// .table-wrap + .table — таблиці даних
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid $border;
+  border-radius: $radius;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+
+  th {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 2px solid $border;
+    background: $surface;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid $border;
+    white-space: nowrap;
+  }
+
+  tbody tr:hover {
+    background: $surface;
+  }
+}
+
+// .form — форми
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 520px;
+  margin-bottom: 20px;
+
+  &__label {
+    font-size: 13px;
+    color: $muted;
+    margin-top: 6px;
+  }
+
+  &__input {
+    padding: 9px 12px;
+    border: 1px solid $border;
+    border-radius: $radius;
+    font: inherit;
+    background: $bg;
+
+    &:focus {
+      outline: 2px solid $text;
+      outline-offset: -1px;
+    }
+  }
+}
+
+// .btn — кнопки
+.btn {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 10px 22px;
+  border: 1px solid $text;
+  border-radius: $radius;
+  background: $text;
+  color: $bg;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    opacity: 0.85;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  &--ghost {
+    background: $bg;
+    color: $text;
+  }
+}
+
+// .alert — повідомлення (червоний — помилка, зелений — успіх)
+.alert {
+  padding: 12px 16px;
+  border-radius: $radius;
+  border: 1px solid $err;
+  background: $err-bg;
+  color: $err;
+  margin-bottom: 18px;
+
+  &--ok {
+    border-color: $ok;
+    background: $ok-bg;
+    color: $ok;
+  }
+}
+
+// дрібниці
+.muted {
+  color: $muted;
+}
+
+.code {
+  background: $surface;
+  border: 1px solid $border;
+  border-radius: $radius;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 13px;
+}
+
+.link {
+  text-decoration: underline;
+  font-weight: 600;
+}
