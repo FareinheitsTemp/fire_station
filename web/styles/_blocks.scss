@@ -1,51 +1,166 @@
-// BEM-блоки інтерфейсу.
+// BEM-блоки інтерфейсу (стиль Supabase-like: чисті панелі, тонкі бордери).
 
-// .layout — каркас: сайдбар + контент
+// .layout — каркас: фіксований сайдбар + головна колонка
 .layout {
   display: flex;
   min-height: 100vh;
 
-  &__sidebar {
-    width: 230px;
-    flex-shrink: 0;
-    border-right: 1px solid $border;
-    padding: 24px 16px;
-  }
-
-  &__logo {
-    font-weight: 700;
-    margin-bottom: 24px;
+  &__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   &__content {
     flex: 1;
-    padding: 32px 40px;
-    max-width: 1100px;
+    padding: 28px 36px 48px;
+    max-width: 1200px;
+    width: 100%;
   }
 }
 
-// .nav — меню в сайдбарі
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+// .sidebar — ліва панель навігації
+.sidebar {
+  width: 248px;
+  flex-shrink: 0;
+  border-right: 1px solid $border;
+  background: $surface;
+  padding: 18px 12px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 
-  &__link {
-    padding: 8px 12px;
-    border-radius: $radius;
+  &__logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 6px 10px 16px;
+  }
+}
+
+.sgroup {
+  margin-bottom: 14px;
+
+  &__title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
     color: $muted;
-    border-left: 3px solid transparent;
+    padding: 6px 10px 4px;
 
-    &:hover {
-      background: $surface;
-      color: $text;
+    &--btn {
+      background: none;
+      border: 0;
+      font: inherit;
+      color: $muted;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+      display: flex;
+      gap: 6px;
     }
+  }
+}
 
-    &--active {
-      color: $text;
-      font-weight: 600;
-      border-left-color: $text;
-      background: $surface;
+.slink {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: $text;
+  font-size: 14px;
+
+  &:hover {
+    background: #f0f1f3;
+  }
+
+  &--active {
+    background: #ececee;
+    font-weight: 600;
+  }
+
+  &__icon {
+    width: 18px;
+    text-align: center;
+  }
+
+  &__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+}
+
+// .topbar — верхня панель: хлібні крихти + стан БД
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  padding: 0 28px;
+  border-bottom: 1px solid $border;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(6px);
+
+  &__crumbs {
+    font-size: 14px;
+    color: $muted;
+  }
+
+  &__cur {
+    color: $text;
+    font-weight: 600;
+  }
+
+  &__sep {
+    margin: 0 8px;
+    color: $border;
+  }
+
+  &__right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+}
+
+.dbstatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: $muted;
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: $muted;
+  }
+
+  &--ok {
+    color: $ok;
+
+    .dbstatus__dot {
+      background: $ok;
+    }
+  }
+
+  &--err {
+    color: $err;
+
+    .dbstatus__dot {
+      background: $err;
     }
   }
 }
@@ -63,6 +178,13 @@
   }
 }
 
+.panel {
+  border: 1px solid $border;
+  border-radius: $radius;
+  background: $bg;
+  padding: 14px;
+}
+
 // .cards + .card — картки статистики
 .cards {
   display: grid;
@@ -74,7 +196,8 @@
   border: 1px solid $border;
   border-radius: $radius;
   padding: 16px 18px;
-  background: $surface;
+  background: $bg;
+  box-shadow: $shadow;
 
   &__title {
     color: $muted;
@@ -92,18 +215,65 @@
   }
 }
 
+// .line-chart — графік на дашборді
+.line-chart {
+  width: 100%;
+  height: auto;
+
+  &__grid {
+    stroke: $border;
+    stroke-dasharray: 3 4;
+  }
+
+  &__tick {
+    font-size: 11px;
+    fill: $muted;
+  }
+
+  &__line {
+    fill: none;
+    stroke: $text;
+    stroke-width: 2;
+  }
+
+  &__area {
+    fill: $text;
+    opacity: 0.06;
+  }
+
+  &__dot {
+    fill: $bg;
+    stroke: $text;
+    stroke-width: 2;
+  }
+
+  &__tip {
+    font-size: 12px;
+    font-weight: 600;
+    fill: $text;
+  }
+}
+
 // .recent — список останніх викликів
 .recent {
   list-style: none;
   padding: 0;
   margin: 0 0 16px;
+  border: 1px solid $border;
+  border-radius: $radius;
+  overflow: hidden;
 
   &__item {
     display: flex;
     align-items: center;
     gap: 14px;
-    padding: 10px 0;
+    padding: 10px 14px;
     border-bottom: 1px solid $border;
+    background: $bg;
+
+    &:last-child {
+      border-bottom: 0;
+    }
   }
 
   &__date {
@@ -123,7 +293,8 @@
   padding: 2px 10px;
   border-radius: 999px;
   border: 1px solid $border;
-  font-size: 13px;
+  font-size: 12.5px;
+  white-space: nowrap;
 
   &--ok {
     color: $ok;
@@ -144,54 +315,88 @@
   }
 }
 
-// .table-list — список таблиць БД
-.table-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 460px;
+// .tbl-cards — картки таблиць (сторінка «Усі таблиці»)
+.tbl-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
 
-  &__item {
+.tbl-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid $border;
+  border-radius: $radius;
+  padding: 14px 16px;
+  background: $bg;
+  box-shadow: $shadow;
+
+  &:hover {
+    border-color: $muted;
+  }
+
+  &__icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
     display: flex;
     align-items: center;
-    padding: 10px 14px;
-    border: 1px solid $border;
-    border-radius: $radius;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
 
-    &:hover {
-      background: $surface;
-      font-weight: 600;
-    }
+  &__body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__label {
+    font-weight: 600;
+  }
+
+  &__name {
+    font-size: 12px;
+    color: $muted;
+  }
+
+  &__arrow {
+    margin-left: auto;
+    color: $muted;
   }
 }
 
-.dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  margin-right: 10px;
-  flex-shrink: 0;
-}
-
-// .table-wrap + .table — таблиці даних
-.table-wrap {
+// .grid — таблиця даних у стилі Supabase
+.grid-wrap {
   overflow-x: auto;
   border: 1px solid $border;
   border-radius: $radius;
+  background: $bg;
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
-.table {
+.grid {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13.5px;
 
   th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
     text-align: left;
-    padding: 10px 12px;
-    border-bottom: 2px solid $border;
+    padding: 9px 12px;
+    border-bottom: 1px solid $border;
     background: $surface;
     white-space: nowrap;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: $muted;
   }
 
   td {
@@ -200,28 +405,80 @@
     white-space: nowrap;
   }
 
-  tbody tr:hover {
-    background: $surface;
+  tbody tr:nth-child(even) {
+    background: #fcfcfd;
   }
 
-  &__actions {
-    white-space: nowrap;
+  tbody tr:hover {
+    background: #f3f4f6;
   }
+
+  &__colname {
+    display: block;
+    font-size: 10px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: $muted;
+    opacity: 0.75;
+  }
+
+  &__actcol {
+    width: 90px;
+    text-align: right;
+  }
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 6px;
+  border: 1px solid $border;
+  font-size: 12.5px;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  background: $bg;
+
+  &--pk {
+    cursor: pointer;
+
+    &:hover {
+      border-color: $text;
+    }
+  }
+
+  &--ref {
+    background: $surface;
+  }
+}
+
+.null {
+  color: $muted;
+  opacity: 0.6;
 }
 
 // .toolbar — панель дій над таблицею
 .toolbar {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 16px;
+
+  &__search {
+    max-width: 260px;
+  }
+
+  &__count {
+    margin-left: auto;
+    font-size: 13px;
+  }
 }
 
-// .icon-btn — малі кнопки дій у рядку таблиці
+// .icon-btn — малі кнопки
 .icon-btn {
   border: 1px solid $border;
   background: $bg;
   border-radius: 8px;
-  padding: 4px 8px;
+  padding: 4px 9px;
   cursor: pointer;
   font-size: 13px;
 
@@ -242,26 +499,26 @@
   max-width: 520px;
   margin-bottom: 20px;
 
-  &--panel {
-    border: 1px solid $border;
-    border-radius: $radius;
-    background: $surface;
-    padding: 20px;
+  &--grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 16px;
+    max-width: none;
+    margin-bottom: 0;
   }
 
   &__label {
     font-size: 13px;
     color: $muted;
-    margin-top: 6px;
     display: block;
     margin-bottom: 4px;
   }
 
   &__input {
     width: 100%;
-    padding: 9px 12px;
+    padding: 8px 11px;
     border: 1px solid $border;
-    border-radius: $radius;
+    border-radius: 8px;
     font: inherit;
     background: $bg;
 
@@ -272,22 +529,56 @@
   }
 
   &__actions {
+    grid-column: 1 / -1;
     display: flex;
     gap: 10px;
     margin-top: 8px;
   }
 }
 
+// .modal — модальне вікно (форма запису)
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(17, 24, 39, 0.35);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 60px 20px;
+
+  &__panel {
+    background: $bg;
+    border-radius: 12px;
+    box-shadow: $shadow-lg;
+    width: 100%;
+    max-width: 640px;
+    padding: 22px 24px;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  &__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 16px;
+  }
+}
+
 // .btn — кнопки
 .btn {
   align-self: flex-start;
-  padding: 10px 22px;
+  padding: 9px 20px;
   border: 1px solid $text;
-  border-radius: $radius;
+  border-radius: 8px;
   background: $text;
   color: $bg;
   font: inherit;
   font-weight: 600;
+  font-size: 14px;
   cursor: pointer;
 
   &:hover {
@@ -302,6 +593,7 @@
   &--ghost {
     background: $bg;
     color: $text;
+    border-color: $border;
   }
 }
 
@@ -322,12 +614,45 @@
 }
 
 // .node-graph — інтерактивний граф структури БД
-.node-graph {
-  width: 100%;
-  height: auto;
+.node-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.fchip {
+  border: 1px solid $border;
+  background: $bg;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: $muted;
+  cursor: pointer;
+
+  &--on {
+    font-weight: 600;
+  }
+}
+
+.node-stage {
+  position: relative;
   border: 1px solid $border;
   border-radius: $radius;
   background: $surface;
+  overflow: hidden;
+}
+
+.node-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
 
   &__core rect {
     fill: $text;
@@ -361,6 +686,34 @@
   &__name {
     font-size: 11px;
     fill: $muted;
+  }
+
+  &__controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 6px;
+  }
+
+  &__minimap {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    border: 1px solid $border;
+    border-radius: 8px;
+    background: $bg;
+    opacity: 0.92;
+  }
+
+  &__minimap-bg {
+    fill: $bg;
+  }
+
+  &__viewport {
+    fill: rgba(17, 24, 39, 0.06);
+    stroke: $muted;
+    stroke-width: 8;
   }
 }
 
@@ -405,4 +758,39 @@
 .link {
   text-decoration: underline;
   font-weight: 600;
+}
+
+// .table (legacy, для результатів AI) — залишаємо простий варіант
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid $border;
+  border-radius: $radius;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+
+  th {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 2px solid $border;
+    background: $surface;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid $border;
+    white-space: nowrap;
+  }
+
+  tbody tr:hover {
+    background: $surface;
+  }
+
+  &__actions {
+    white-space: nowrap;
+  }
 }

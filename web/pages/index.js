@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { get } from '../lib/api'
 import StatusBadge from '../components/StatusBadge'
+import LineChart from '../components/LineChart'
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [recent, setRecent] = useState([])
+  const [byDay, setByDay] = useState([])
   const [error, setError] = useState('')
 
   const load = () => {
@@ -16,6 +18,9 @@ export default function Dashboard() {
       .catch(() => setError('API-сервер не відповідає — запусти fire-station.exe'))
     get('/api/stats').then(setStats).catch(() => {})
     get('/api/recent').then(setRecent).catch(() => {})
+    get('/api/stats/calls-by-day?days=14')
+      .then((list) => setByDay(list.map((d) => ({ label: d.day, value: d.count }))))
+      .catch(() => {})
   }
 
   useEffect(load, [])
@@ -47,6 +52,11 @@ export default function Dashboard() {
         </div>
       )}
 
+      <h2 className="page__subtitle">Виклики за останні 14 днів</h2>
+      <div className="panel">
+        <LineChart data={byDay} />
+      </div>
+
       <h2 className="page__subtitle">Останні виклики</h2>
       {!recent.length && <p className="muted">(поки порожньо)</p>}
       <ul className="recent">
@@ -65,10 +75,6 @@ export default function Dashboard() {
           </li>
         ))}
       </ul>
-
-      <button className="btn btn--ghost" onClick={load}>
-        Оновити
-      </button>
     </div>
   )
 }

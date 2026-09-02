@@ -47,6 +47,7 @@ func Run(cfg *config.Config) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.health)
 	mux.HandleFunc("GET /api/stats", a.stats)
+	mux.HandleFunc("GET /api/stats/calls-by-day", a.callsByDay)
 	mux.HandleFunc("GET /api/recent", a.recent)
 	mux.HandleFunc("GET /api/meta", a.metaList)
 	mux.HandleFunc("GET /api/ref/{table}", a.refList)
@@ -173,6 +174,15 @@ func scanRows(rows *sql.Rows) ([]string, [][]string, error) {
 
 var dateLayouts = []string{"2006-01-02", "2006-01-02 15:04", "2006-01-02T15:04", "02.01.2006 15:04", time.RFC3339}
 
+func parseTimeLoose(s string) time.Time {
+	for _, l := range []string{"2006-01-02 15:04:05", "2006-01-02 15:04", time.RFC3339, "02.01.2006 15:04"} {
+		if t, err := time.ParseInLocation(l, s, time.Local); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
 // rowValues валідує значення за метаданими й конвертує у типи Access.
 func rowValues(tm db.TableMeta, vals map[string]string) ([]string, []any, error) {
 	known := map[string]bool{}
@@ -263,6 +273,56 @@ func (a *api) stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+// callsByDay — кількість викликів по днях за ?days= (1..90, дефолт 14).
+func (a *api) callsByDay(w http.ResponseWriter, r *http.Request) {
+	if !a.dbOK(w) {
+		return
+	}
+	days := 14
+	if d := r.URL.Query().Get("days"); d != "" {
+		if n, err := strconv.Atoi(d); err == nil && n >= 1 && n <= 90 {
+			days = n
+		}
+	}
+	now := time.Now()
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).AddDate(0, 0, -(days - 1))
+
+	rows, err := a.store.Query(r.Context(), "SELECT call_at FROM calls WHERE call_at >= ?", start)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer rows.Close()
+
+	counts := map[string]int{}
+	for rows.Next() {
+		var v any
+		if err := rows.Scan(&v); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		var t time.Time
+		switch x := v.(type) {
+		case time.Time:
+			t = x
+		case []byte:
+			t = parseTimeLoose(string(x))
+		case string:
+			t = parseTimeLoose(x)
+		}
+		if !t.IsZero() {
+			counts[t.Format("2006-01-02")]++
+		}
+	}
+
+	out := make([]map[string]any, 0, days)
+	for i := 0; i < days; i++ {
+		d := start.AddDate(0, 0, i)
+		out = append(out, map[string]any{"day": d.Format("02.01"), "count": counts[d.Format("2006-01-02")]})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (a *api) recent(w http.ResponseWriter, r *http.Request) {
@@ -371,7 +431,7 @@ func (a *api) insertRow(w http.ResponseWriter, r *http.Request) {
 	}
 	q := fmt.Sprintf("INSERT INTO [%s] ([%s]) VALUES (%s)",
 		tm.Name, strings.Join(cols, "],["), strings.TrimSuffix(strings.Repeat("?,", len(cols)), ","))
-	if _, err := a.store.Exec(q, args...); err != nil {
+	if _, err := a.store.ExecContext(r.Context(), q, args...); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -411,7 +471,7 @@ func (a *api) updateRow(w http.ResponseWriter, r *http.Request) {
 	}
 	args = append(args, id)
 	q := fmt.Sprintf("UPDATE [%s] SET %s WHERE [%s] = ?", tm.Name, strings.Join(set, ", "), tm.PK)
-	if _, err := a.store.Exec(q, args...); err != nil {
+	if _, err := a.store.ExecContext(r.Context(), q, args...); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -433,7 +493,7 @@ func (a *api) deleteRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := fmt.Sprintf("DELETE FROM [%s] WHERE [%s] = ?", tm.Name, tm.PK)
-	if _, err := a.store.Exec(q, id); err != nil {
+	if _, err := a.store.ExecContext(r.Context(), q, id); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}

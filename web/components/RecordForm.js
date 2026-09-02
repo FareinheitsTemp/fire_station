@@ -9,6 +9,7 @@ function toDateInput(v) {
   return String(v).slice(0, 10)
 }
 
+// RecordForm — модальне вікно з формою, згенерованою з метаданих таблиці.
 export default function RecordForm({ meta, initial, onSubmit, onCancel }) {
   const [values, setValues] = useState({})
   const [refs, setRefs] = useState({})
@@ -62,7 +63,7 @@ export default function RecordForm({ meta, initial, onSubmit, onCancel }) {
         )
       case 'number':
         return <input className="form__input" type="number" step="any" value={values[c.name] ?? ''} onChange={set(c.name)} />
-      case 'date':
+      case 'date":
         return <input className="form__input" type="date" value={values[c.name] ?? ''} onChange={set(c.name)} />
       default:
         return <input className="form__input" value={values[c.name] ?? ''} onChange={set(c.name)} />
@@ -70,30 +71,38 @@ export default function RecordForm({ meta, initial, onSubmit, onCancel }) {
   }
 
   return (
-    <form
-      className="form form--panel"
-      onSubmit={(e) => {
-        e.preventDefault()
-        onSubmit(values)
-      }}
-    >
-      {meta.columns.map((c) => (
-        <div key={c.name}>
-          <label className="form__label">
-            {c.label}
-            {c.required ? ' *' : ''}
-          </label>
-          {field(c)}
+    <div className="modal" onClick={onCancel}>
+      <div className="modal__panel" onClick={(e) => e.stopPropagation()}>
+        <div className="modal__head">
+          <span>{initial ? `Редагувати запис #${initial[meta.pk]}` : 'Новий запис'}</span>
+          <span className="muted">{meta.label}</span>
         </div>
-      ))}
-      <div className="form__actions">
-        <button className="btn" type="submit">
-          {initial ? 'Зберегти зміни' : 'Додати'}
-        </button>
-        <button className="btn btn--ghost" type="button" onClick={onCancel}>
-          Скасувати
-        </button>
+        <form
+          className="form form--grid"
+          onSubmit={(e) => {
+            e.preventDefault()
+            onSubmit(values)
+          }}
+        >
+          {meta.columns.map((c) => (
+            <div key={c.name}>
+              <label className="form__label">
+                {c.label}
+                {c.required ? ' *' : ''}
+              </label>
+              {field(c)}
+            </div>
+          ))}
+          <div className="form__actions">
+            <button className="btn" type="submit">
+              {initial ? 'Зберегти зміни' : 'Додати запис'}
+            </button>
+            <button className="btn btn--ghost" type="button" onClick={onCancel}>
+              Скасувати
+            </button>
+          </div>
+        </form>
       </div>
-    </form>
+    </div>
   )
 }

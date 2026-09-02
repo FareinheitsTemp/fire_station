@@ -14,11 +14,19 @@ export default function Tables() {
     <div className="page">
       <h1 className="page__title">Таблиці бази даних</h1>
       {error && <div className="alert">{error}</div>}
-      <div className="table-list">
+      <div className="tbl-cards">
         {tables.map((t) => (
-          <Link key={t.name} href={`/tables/${t.name}`} className="table-list__item">
-            <span className="dot" style={{ background: t.color }} />
-            {t.label} <span className="muted">({t.name})</span>
+          <Link key={t.name} href={`/tables/${t.name}`} className="tbl-card">
+            <span className="tbl-card__icon" style={{ background: t.color }}>
+              {t.label[0]}
+            </span>
+            <span className="tbl-card__body">
+              <span className="tbl-card__label">{t.label}</span>
+              <span className="tbl-card__name">
+                {t.name} • {t.columns.length} полів
+              </span>
+            </span>
+            <span className="tbl-card__arrow">→</span>
           </Link>
         ))}
       </div>
