@@ -3,6 +3,7 @@ import { post } from '../lib/api'
 import Icon from './Icon'
 
 // ChatWidget — плаваюче чат-вікно з агентом АІС (доступне на всіх сторінках).
+// Агент може і виконувати дії в БД — тоді під відповіддю з'являється чіп.
 export default function ChatWidget() {
   const [open, setOpen] = useState(false)
   const [msgs, setMsgs] = useState([])
@@ -26,7 +27,7 @@ export default function ChatWidget() {
     setError('')
     try {
       const res = await post('/api/chat', { messages: next })
-      setMsgs([...next, { role: 'assistant', content: res.reply }])
+      setMsgs([...next, { role: 'assistant', content: res.reply, action: res.action || null }])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -52,13 +53,18 @@ export default function ChatWidget() {
           <div className="chat-panel__body" ref={bodyRef}>
             {!msgs.length && (
               <p className="muted">
-                Я в курсі стану частини: статистика, останні виклики, правила бази знань. Питай —
-                відповім.
+                Я в курсі стану частини: статистика, виклики, правила бази знань. Можу і змінювати
+                дані — наприклад: «додай посаду Старший пожежник».
               </p>
             )}
             {msgs.map((m, i) => (
               <div key={i} className={`chat-msg chat-msg--${m.role}`}>
                 {m.content}
+                {m.action && (
+                  <div className="chat-action">
+                    <Icon name="edit" size={11} /> {m.action.action} → {m.action.table}
+                  </div>
+                )}
               </div>
             ))}
             {busy && <div className="chat-msg chat-msg--assistant">Друкує…</div>}

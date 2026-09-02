@@ -11,6 +11,7 @@ const NAMES = {
   reports: 'Звіти',
   ai: 'AI-асистент',
   agent: 'Агент',
+  selftest: 'Тестування',
   settings: 'Налаштування',
 }
 

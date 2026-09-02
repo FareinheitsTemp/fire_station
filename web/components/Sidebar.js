@@ -9,6 +9,7 @@ const SERVICES = [
   ['/reports', 'Звіти', 'report'],
   ['/ai', 'AI-асистент', 'ai'],
   ['/agent', 'Агент (авто-мод)', 'bot'],
+  ['/selftest', 'Тестування', 'flask'],
   ['/settings', 'Налаштування', 'settings'],
 ]
 

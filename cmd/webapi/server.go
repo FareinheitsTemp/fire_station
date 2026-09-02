@@ -102,6 +102,7 @@ func Run(cfg *config.Config) error {
 	mux.HandleFunc("POST /api/ai", a.aiQuery)
 	mux.HandleFunc("POST /api/chat", a.chat)
 	mux.HandleFunc("POST /api/agent/analyze", a.agentAnalyze)
+	mux.HandleFunc("POST /api/selftest", a.selfTest)
 	mux.HandleFunc("GET /api/config", a.getConfig)
 	mux.HandleFunc("PUT /api/config", a.putConfig)
 
@@ -146,7 +147,6 @@ func printDiagnostics(cfg *config.Config) {
 
 // --- middleware ---
 
-// withRecover ловить паніку в хендлері й відповідає JSON 500 замість падіння.
 func withRecover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -713,7 +713,7 @@ func (a *api) reportFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, filepath.Join(exeRelative("reports"), base))
 }
 
-// --- ШІ: NL→SQL, чат, авто-мод ---
+// --- ШІ: NL→SQL, чат (з агентськими діями), авто-мод, самотест ---
 
 // systemContext: схема + правила БЗ (+ статистика для чату/агента).
 func (a *api) systemContext(ctx context.Context, withStats bool) string {
@@ -774,11 +774,92 @@ func (a *api) aiQuery(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"sql": sqlText, "columns": cols, "rows": data})
 }
 
+// --- агентські дії в чаті: ШІ може редагувати БД через валідовані команди ---
+
+type agentCommand struct {
+	Action  string            `json:"action"` // insert | update | delete
+	Table   string            `json:"table"`
+	ID      int64             `json:"id"`
+	Values  map[string]string `json:"values"`
+	Explain string            `json:"explain"`
+}
+
+// parseAgentCommand розпізнає JSON-команду, якщо модель відповіла нею.
+func parseAgentCommand(reply string) *agentCommand {
+	clean := ai.StripCodeFences(reply)
+	if i := strings.Index(clean, "{"); i > 0 {
+		clean = clean[i:]
+	}
+	var cmd agentCommand
+	if err := json.Unmarshal([]byte(clean), &cmd); err != nil {
+		return nil
+	}
+	switch cmd.Action {
+	case "insert", "update", "delete":
+		if cmd.Table != "" {
+			return &cmd
+		}
+	}
+	return nil
+}
+
+// executeAgentCommand виконує команду агента через той самий валідований шлях, що й CRUD API.
+func (a *api) executeAgentCommand(ctx context.Context, cmd *agentCommand) (string, error) {
+	tm, ok := db.TableMetaByName(cmd.Table)
+	if !ok {
+		return "", fmt.Errorf("невідома таблиця %q", cmd.Table)
+	}
+	switch cmd.Action {
+	case "insert":
+		cols, args, err := rowValues(tm, cmd.Values)
+		if err != nil {
+			return "", err
+		}
+		if len(cols) == 0 {
+			return "", fmt.Errorf("немає даних для вставки")
+		}
+		q := fmt.Sprintf("INSERT INTO [%s] ([%s]) VALUES (%s)",
+			tm.Name, strings.Join(cols, "],["), strings.TrimSuffix(strings.Repeat("?,", len(cols)), ","))
+		if _, err := a.store.ExecContext(ctx, q, args...); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("додано запис у %s", tm.Label), nil
+	case "update":
+		if cmd.ID == 0 {
+			return "", fmt.Errorf("для update потрібен id")
+		}
+		cols, args, err := rowValues(tm, cmd.Values)
+		if err != nil {
+			return "", err
+		}
+		set := make([]string, len(cols))
+		for i, c := range cols {
+			set[i] = "[" + c + "] = ?"
+		}
+		args = append(args, cmd.ID)
+		q := fmt.Sprintf("UPDATE [%s] SET %s WHERE [%s] = ?", tm.Name, strings.Join(set, ", "), tm.PK)
+		if _, err := a.store.ExecContext(ctx, q, args...); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("оновлено запис #%d у %s", cmd.ID, tm.Label), nil
+	case "delete":
+		if cmd.ID == 0 {
+			return "", fmt.Errorf("для delete потрібен id")
+		}
+		q := fmt.Sprintf("DELETE FROM [%s] WHERE [%s] = ?", tm.Name, tm.PK)
+		if _, err := a.store.ExecContext(ctx, q, cmd.ID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("видалено запис #%d з %s", cmd.ID, tm.Label), nil
+	}
+	return "", fmt.Errorf("невідома дія %q", cmd.Action)
+}
+
 type chatReq struct {
 	Messages []ai.Message `json:"messages"`
 }
 
-// chat — розмова з агентом (контекст: схема БД + правила БЗ + статистика).
+// chat — розмова з агентом; агент може і редагувати дані (через валідовані JSON-команди).
 func (a *api) chat(w http.ResponseWriter, r *http.Request) {
 	if !a.dbOK(w) || !a.aiOK(w) {
 		return
@@ -796,8 +877,12 @@ func (a *api) chat(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	sys := "Ти — агент АІС «Пожежна частина». Відповідай українською, коротко і по суті. " +
-		"Ти знаєш структуру бази даних, чинні правила бази знань і поточну статистику частини. " +
-		"Якщо питання про конкретні числа — спирайся на статистику; якщо треба глибший аналіз — порадь скористатись AI-асистентом або авто-модулем.\n\n" +
+		"Ти знаєш структуру бази даних, чинні правила бази знань і поточну статистику частини.\n" +
+		"ВАЖЛИВО: якщо користувач просить ЗМІНИТИ дані (додати/оновити/видалити запис у таблиці) — " +
+		"відповідай ЛИШЕ валідним JSON однією командою (без markdown, без додаткового тексту): " +
+		`{"action":"insert|update|delete","table":"ім'я таблиці","id":0,"values":{"колонка":"значення"},"explain":"що роблю"}. ` +
+		"id потрібен для update/delete; values — для insert/update; колонки — лише ті, що є у схемі (без id). " +
+		"У всіх інших випадках відповідай звичайним текстом.\n\n" +
 		a.systemContext(ctx, true)
 
 	msgs := append([]ai.Message{{Role: "system", Content: sys}}, req.Messages...)
@@ -806,7 +891,19 @@ func (a *api) chat(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"reply": reply})
+
+	resp := map[string]any{"reply": reply}
+	if cmd := parseAgentCommand(reply); cmd != nil {
+		summary, execErr := a.executeAgentCommand(ctx, cmd)
+		if execErr != nil {
+			resp["reply"] = cmd.Explain + "\n\nНе вдалося виконати: " + execErr.Error()
+		} else {
+			resp["reply"] = cmd.Explain + "\n\nВиконано: " + summary
+		}
+		resp["action"] = map[string]string{"action": cmd.Action, "table": cmd.Table}
+		log.Printf("[agent] %s %s id=%d", cmd.Action, cmd.Table, cmd.ID)
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // agentAnalyze — авто-мод: автономний аналіз стану системи й самостійне
@@ -888,6 +985,128 @@ func (a *api) agentAnalyze(w http.ResponseWriter, r *http.Request) {
 		"rules_added": added,
 		"rules_total": len(rules) + added,
 	})
+}
+
+// --- самотест системи ---
+
+type testResult struct {
+	Name   string `json:"name"`
+	OK     bool   `json:"ok"`
+	Detail string `json:"detail"`
+	Ms     int64  `json:"ms"`
+}
+
+// selfTest проганяє 7 перевірок усієї зв'язки: БД, таблиці, CRUD, розкладка, шрифт, ШІ.
+func (a *api) selfTest(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	defer cancel()
+
+	var results []testResult
+	run := func(name string, fn func() (string, error)) {
+		start := time.Now()
+		detail, err := fn()
+		res := testResult{Name: name, Detail: detail, Ms: time.Since(start).Milliseconds()}
+		if err != nil {
+			res.Detail = err.Error()
+		}
+		res.OK = err == nil
+		results = append(results, res)
+	}
+
+	run("Підключення до БД", func() (string, error) {
+		if a.store == nil {
+			if a.dbErr != nil {
+				return "", a.dbErr
+			}
+			return "", fmt.Errorf("store не ініціалізовано")
+		}
+		return "з'єднання активне", nil
+	})
+
+	if a.store != nil {
+		run("Читання всіх таблиць", func() (string, error) {
+			var parts []string
+			for _, tm := range db.TablesMeta() {
+				var n int
+				if err := a.store.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM [%s]", tm.Name)).Scan(&n); err != nil {
+					return "", fmt.Errorf("%s: %w", tm.Name, err)
+				}
+				parts = append(parts, fmt.Sprintf("%s:%d", tm.Name, n))
+			}
+			return strings.Join(parts, " "), nil
+		})
+
+		run("CRUD-цикл (kb_rules)", func() (string, error) {
+			topic := "selftest-" + time.Now().Format("150405.000")
+			if _, err := a.store.ExecContext(ctx,
+				"INSERT INTO kb_rules (topic, category, condition_text, recommendation, priority) VALUES (?,?,?,?,?)",
+				topic, "безпека", "тестова умова", "тестова рекомендація", "низький"); err != nil {
+				return "", fmt.Errorf("insert: %w", err)
+			}
+			if _, err := a.store.ExecContext(ctx,
+				"UPDATE kb_rules SET priority = ? WHERE topic = ?", "середній", topic); err != nil {
+				return "", fmt.Errorf("update: %w", err)
+			}
+			if _, err := a.store.ExecContext(ctx, "DELETE FROM kb_rules WHERE topic = ?", topic); err != nil {
+				return "", fmt.Errorf("delete: %w", err)
+			}
+			return "insert → update → delete — усе пройшло", nil
+		})
+
+		run("Розкладка графа (запис/читання)", func() (string, error) {
+			if err := a.store.SaveLayout("selftest", 12.5, -7.25); err != nil {
+				return "", fmt.Errorf("запис: %w", err)
+			}
+			pos, ok := a.store.Layouts()["selftest"]
+			if !ok {
+				return "", fmt.Errorf("позицію не прочитано")
+			}
+			if err := a.store.SaveLayout("selftest", 0, 0); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("прочитано dx=%.1f dy=%.1f", pos.DX, pos.DY), nil
+		})
+	}
+
+	run("Шрифт для PDF", func() (string, error) {
+		p := exeRelative(a.cfg.FontPath)
+		st, err := os.Stat(p)
+		if err != nil {
+			return "", fmt.Errorf("немає файла %s", p)
+		}
+		return fmt.Sprintf("%s (%d КБ)", a.cfg.FontPath, st.Size()/1024), nil
+	})
+
+	run("ШІ: endpoint + ключ", func() (string, error) {
+		if a.cfg.AIKey == "" {
+			return "", fmt.Errorf("ключ не заданий (Налаштування)")
+		}
+		if err := a.aiClient().Ping(ctx); err != nil {
+			return "", err
+		}
+		c := a.aiClient()
+		return c.BaseURL() + " — відповів", nil
+	})
+
+	if a.cfg.AIKey != "" {
+		run("ШІ: відповідь моделі", func() (string, error) {
+			reply, err := a.aiClient().Chat(ctx, []ai.Message{
+				{Role: "user", Content: "Відповідай рівно одним словом: ок"},
+			})
+			if err != nil {
+				return "", err
+			}
+			return "модель відповіла: " + reply, nil
+		})
+	}
+
+	allOK := true
+	for _, r := range results {
+		if !r.OK {
+			allOK = false
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": allOK, "results": results})
 }
 
 // --- конфіг ---

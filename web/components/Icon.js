@@ -101,6 +101,13 @@ const PATHS = {
       <path d="M21 3l-6.8 18-3.6-7.6L3 10z" />
     </>
   ),
+  flask: (
+    <>
+      <path d="M9.5 3h5" />
+      <path d="M10.5 3v5.5L4.8 17.8A2.4 2.4 0 0 0 7 21.5h10a2.4 2.4 0 0 0 2.2-3.7L13.5 8.5V3" />
+      <line x1="7.5" y1="15" x2="16.5" y2="15" />
+    </>
+  ),
 }
 
 export default function Icon({ name, size = 15 }) {
