@@ -8,6 +8,7 @@ const SERVICES = [
   ['/new-call', 'Новий виклик', 'call'],
   ['/reports', 'Звіти', 'report'],
   ['/ai', 'AI-асистент', 'ai'],
+  ['/agent', 'Агент (авто-мод)', 'bot'],
   ['/settings', 'Налаштування', 'settings'],
 ]
 

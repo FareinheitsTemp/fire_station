@@ -57,13 +57,19 @@ func (s *Store) seedKnowledge() error {
 		{"Несправна техніка", "техніка", "результат перевірки — «несправно»", "не допускати техніку до виїздів до усунення; перевести статус у «ремонт»", "високий"},
 	}
 	for _, r := range rules {
-		if _, err := s.db.ExecContext(ctx,
-			"INSERT INTO kb_rules (topic, category, condition_text, recommendation, priority) VALUES (?,?,?,?,?)",
-			r.topic, r.cat, r.cond, r.rec, r.prio); err != nil {
+		if err := s.InsertRule(r.topic, r.cat, r.cond, r.rec, r.prio); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// InsertRule додає правило до бази знань (використовується і агентом авто-моду).
+func (s *Store) InsertRule(topic, category, condition, recommendation, priority string) error {
+	_, err := s.db.ExecContext(context.Background(),
+		"INSERT INTO kb_rules (topic, category, condition_text, recommendation, priority) VALUES (?,?,?,?,?)",
+		topic, category, condition, recommendation, priority)
+	return err
 }
 
 // KnowledgeRule — правило бази знань.

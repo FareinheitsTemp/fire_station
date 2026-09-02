@@ -82,6 +82,25 @@ const PATHS = {
   flame: (
     <path d="M12 2.5c1.8 3.8 6 5.8 6 10.5a6 6 0 0 1-12 0c0-1.9.9-3.4 1.8-5 .6 1.6 1.2 3 2.2 3 1.5 0 .8-4.5 2-8.5z" />
   ),
+  bot: (
+    <>
+      <rect x="4" y="8.5" width="16" height="10.5" rx="2.5" />
+      <line x1="12" y1="8.5" x2="12" y2="5" />
+      <circle cx="12" cy="4" r="1.1" />
+      <circle cx="9" cy="13" r="0.9" />
+      <circle cx="15" cy="13" r="0.9" />
+      <path d="M9.5 16.2h5" />
+    </>
+  ),
+  chat: (
+    <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4.5l1.9-3.1A8.5 8.5 0 1 1 21 11.5z" />
+  ),
+  send: (
+    <>
+      <path d="M21 3L10.6 13.4" />
+      <path d="M21 3l-6.8 18-3.6-7.6L3 10z" />
+    </>
+  ),
 }
 
 export default function Icon({ name, size = 15 }) {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/FareinheitsTemp/fire_station/internal/ai"
@@ -26,11 +27,43 @@ type api struct {
 	cfg   *config.Config
 	store *db.Store
 	dbErr error
+	errs  *errLog
+}
+
+// --- журнал помилок (кільцевий буфер для авто-моду) ---
+
+type errEntry struct {
+	Time   time.Time `json:"time"`
+	Method string    `json:"method"`
+	Path   string    `json:"path"`
+	Status int       `json:"status"`
+}
+
+type errLog struct {
+	mu    sync.Mutex
+	items []errEntry
+}
+
+func (l *errLog) add(e errEntry) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.items = append(l.items, e)
+	if len(l.items) > 30 {
+		l.items = l.items[len(l.items)-30:]
+	}
+}
+
+func (l *errLog) snapshot() []errEntry {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]errEntry, len(l.items))
+	copy(out, l.items)
+	return out
 }
 
 // Run піднімає БД і HTTP-сервер на 127.0.0.1:8080.
 func Run(cfg *config.Config) error {
-	a := &api{cfg: cfg}
+	a := &api{cfg: cfg, errs: &errLog{}}
 	dbPath := exeRelative(cfg.DBPath)
 	if err := db.EnsureDatabase(dbPath); err != nil {
 		a.dbErr = err
@@ -65,6 +98,8 @@ func Run(cfg *config.Config) error {
 	mux.HandleFunc("POST /api/reports/calls", a.reportCalls)
 	mux.HandleFunc("GET /api/reports/file/{name}", a.reportFile)
 	mux.HandleFunc("POST /api/ai", a.aiQuery)
+	mux.HandleFunc("POST /api/chat", a.chat)
+	mux.HandleFunc("POST /api/agent/analyze", a.agentAnalyze)
 	mux.HandleFunc("GET /api/config", a.getConfig)
 	mux.HandleFunc("PUT /api/config", a.putConfig)
 
@@ -74,7 +109,7 @@ func Run(cfg *config.Config) error {
 	if a.dbErr != nil {
 		fmt.Println("УВАГА: БД недоступна:", a.dbErr)
 	}
-	return http.ListenAndServe(addr, withLogging(withRecover(mux)))
+	return http.ListenAndServe(addr, a.withLogging(withRecover(mux)))
 }
 
 // --- middleware ---
@@ -92,12 +127,26 @@ func withRecover(next http.Handler) http.Handler {
 	})
 }
 
-// withLogging пише в консоль кожен запит: метод, шлях, тривалість.
-func withLogging(next http.Handler) http.Handler {
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// withLogging логує кожен запит у консоль; статуси 4xx/5xx потрапляють у буфер для авто-моду.
+func (a *api) withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("%s %s (%s)", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
+		rec := &statusRecorder{ResponseWriter: w, status: 200}
+		next.ServeHTTP(rec, r)
+		log.Printf("%s %s → %d (%s)", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond))
+		if rec.status >= 400 {
+			a.errs.add(errEntry{Time: time.Now(), Method: r.Method, Path: r.URL.Path, Status: rec.status})
+		}
 	})
 }
 
@@ -133,6 +182,18 @@ func (a *api) dbOK(w http.ResponseWriter) bool {
 		return false
 	}
 	return true
+}
+
+func (a *api) aiOK(w http.ResponseWriter) bool {
+	if a.cfg.AIKey == "" {
+		writeErr(w, http.StatusBadRequest, "немає AI-ключа — додай його на сторінці «Налаштування»")
+		return false
+	}
+	return true
+}
+
+func (a *api) aiClient() *ai.Client {
+	return ai.NewClient(a.cfg.AIBaseURL, a.cfg.AIKey, a.cfg.AIModel)
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -207,7 +268,7 @@ func rowValues(tm db.TableMeta, vals map[string]string) ([]string, []any, error)
 			return nil, nil, fmt.Errorf("обов'язкове поле: %s", c.Label)
 		}
 		if !present || raw == "" {
-			continue // лишаємо NULL/дефолт
+			continue
 		}
 		var v any
 		var err error
@@ -372,8 +433,6 @@ func (a *api) refList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// --- розкладка графа структури ---
-
 func (a *api) getLayout(w http.ResponseWriter, r *http.Request) {
 	if !a.dbOK(w) {
 		return
@@ -529,7 +588,7 @@ func (a *api) deleteRow(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// --- довідники, виклики, звіти, ШІ, конфіг ---
+// --- довідники, виклики, звіти ---
 
 func (a *api) fireTypes(w http.ResponseWriter, r *http.Request) {
 	if !a.dbOK(w) {
@@ -622,16 +681,33 @@ func (a *api) reportFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, filepath.Join(exeRelative("reports"), base))
 }
 
+// --- ШІ: NL→SQL, чат, авто-мод ---
+
+// systemContext: схема + правила БЗ (+ статистика для чату/агента).
+func (a *api) systemContext(ctx context.Context, withStats bool) string {
+	var sb strings.Builder
+	sb.WriteString(db.SchemaDescription())
+	if rules, err := a.store.KnowledgeRules(ctx); err == nil && len(rules) > 0 {
+		sb.WriteString("\n\nБаза знань (чинні правила):\n")
+		for _, r := range rules {
+			fmt.Fprintf(&sb, "- [%s] %s: якщо %s → %s\n", r.Priority, r.Topic, r.Condition, r.Recommendation)
+		}
+	}
+	if withStats {
+		if st, err := a.store.Stats(ctx); err == nil {
+			fmt.Fprintf(&sb, "\nПоточна статистика: викликів усього %d, сьогодні %d, працівників активно %d, техніки в строю %d.\n",
+				st.TotalCalls, st.TodayCalls, st.ActiveEmployees, st.EquipmentOK)
+		}
+	}
+	return sb.String()
+}
+
 type aiReq struct {
 	Question string `json:"question"`
 }
 
 func (a *api) aiQuery(w http.ResponseWriter, r *http.Request) {
-	if !a.dbOK(w) {
-		return
-	}
-	if a.cfg.AIKey == "" {
-		writeErr(w, http.StatusBadRequest, "немає AI-ключа — додай його на сторінці «Налаштування»")
+	if !a.dbOK(w) || !a.aiOK(w) {
 		return
 	}
 	var req aiReq
@@ -643,20 +719,7 @@ func (a *api) aiQuery(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
 
-	// Схема + база знань як контекст для ШІ
-	schemaDesc := db.SchemaDescription()
-	if rules, err := a.store.KnowledgeRules(ctx); err == nil && len(rules) > 0 {
-		var sb strings.Builder
-		sb.WriteString(schemaDesc)
-		sb.WriteString("\n\nБаза знань (правила реагування, для контексту):\n")
-		for _, r := range rules {
-			fmt.Fprintf(&sb, "- [%s] %s: якщо %s → %s\n", r.Priority, r.Topic, r.Condition, r.Recommendation)
-		}
-		schemaDesc = sb.String()
-	}
-
-	client := ai.NewClient(a.cfg.AIKey, a.cfg.AIModel)
-	sqlText, err := client.GenerateSQL(ctx, req.Question, schemaDesc)
+	sqlText, err := a.aiClient().GenerateSQL(ctx, req.Question, a.systemContext(ctx, false))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -679,18 +742,137 @@ func (a *api) aiQuery(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"sql": sqlText, "columns": cols, "rows": data})
 }
 
+type chatReq struct {
+	Messages []ai.Message `json:"messages"`
+}
+
+// chat — розмова з агентом (контекст: схема БД + правила БЗ + статистика).
+func (a *api) chat(w http.ResponseWriter, r *http.Request) {
+	if !a.dbOK(w) || !a.aiOK(w) {
+		return
+	}
+	var req chatReq
+	if !decode(w, r, &req) || len(req.Messages) == 0 {
+		writeErr(w, http.StatusBadRequest, "порожня розмова")
+		return
+	}
+	if len(req.Messages) > 40 {
+		req.Messages = req.Messages[len(req.Messages)-40:]
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+
+	sys := "Ти — агент АІС «Пожежна частина». Відповідай українською, коротко і по суті. " +
+		"Ти знаєш структуру бази даних, чинні правила бази знань і поточну статистику частини. " +
+		"Якщо питання про конкретні числа — спирайся на статистику; якщо треба глибший аналіз — порадь скористатись AI-асистентом або авто-модулем.\n\n" +
+		a.systemContext(ctx, true)
+
+	msgs := append([]ai.Message{{Role: "system", Content: sys}}, req.Messages...)
+	reply, err := a.aiClient().Chat(ctx, msgs)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"reply": reply})
+}
+
+// agentAnalyze — авто-мод: автономний аналіз стану системи й самостійне
+// створення нових правил у базі знань, якщо щось не так або бракує покриття.
+func (a *api) agentAnalyze(w http.ResponseWriter, r *http.Request) {
+	if !a.dbOK(w) || !a.aiOK(w) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	defer cancel()
+
+	stats, _ := a.store.Stats(ctx)
+	recent, _ := a.store.RecentCalls(ctx, 10)
+	rules, _ := a.store.KnowledgeRules(ctx)
+	snapshot := map[string]any{
+		"stats": stats, "recent_calls": recent,
+		"existing_rules": rules, "recent_api_errors": a.errs.snapshot(),
+	}
+	rawSnap, _ := json.MarshalIndent(snapshot, "", "  ")
+
+	sys := `Ти — автономний агент-аналітик АІС «Пожежна частина». Твоє завдання:
+1. Проаналізуй знімок системи: статистику, останні виклики, чинні правила бази знань, останні помилки API.
+2. Знайди проблеми, аномалії чи прогалини в покритті правил.
+3. Якщо треба — запропонуй НОВІ правила (не дублюй чинні).
+Відповідай СТРОГО валідним JSON без markdown і без зайвого тексту:
+{"conclusion": "твій висновок українською (2-4 речення)",
+ "new_rules": [{"topic": "...", "category": "реагування|техніка|персонал|безпека", "condition": "якщо...", "recommendation": "то...", "priority": "низький|середній|високий"}]}
+Якщо нових правил не треба — поверни порожній масив new_rules.`
+
+	out, err := a.aiClient().Chat(ctx, []ai.Message{
+		{Role: "system", Content: sys},
+		{Role: "user", Content: "Знімок системи:\n" + string(rawSnap)},
+	})
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	type ruleIn struct {
+		Topic          string `json:"topic"`
+		Category       string `json:"category"`
+		Condition      string `json:"condition"`
+		Recommendation string `json:"recommendation"`
+		Priority       string `json:"priority"`
+	}
+	var reply struct {
+		Conclusion string   `json:"conclusion"`
+		NewRules   []ruleIn `json:"new_rules"`
+	}
+	clean := ai.StripCodeFences(out)
+	if i := strings.Index(clean, "{"); i > 0 {
+		clean = clean[i:]
+	}
+	if err := json.Unmarshal([]byte(clean), &reply); err != nil {
+		writeErr(w, http.StatusBadGateway, "агент повернув невалідний JSON: "+err.Error())
+		return
+	}
+
+	added := 0
+	for _, nr := range reply.NewRules {
+		if strings.TrimSpace(nr.Topic) == "" {
+			continue
+		}
+		cat, prio := nr.Category, nr.Priority
+		if cat == "" {
+			cat = "висновки"
+		}
+		if prio == "" {
+			prio = "середній"
+		}
+		if err := a.store.InsertRule(nr.Topic, cat, nr.Condition, nr.Recommendation, prio); err == nil {
+			added++
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"conclusion":  reply.Conclusion,
+		"new_rules":   reply.NewRules,
+		"rules_added": added,
+		"rules_total": len(rules) + added,
+	})
+}
+
+// --- конфіг ---
+
 func (a *api) getConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"db_path": a.cfg.DBPath, "font_path": a.cfg.FontPath,
-		"ai_model": a.cfg.AIModel, "has_ai_key": a.cfg.AIKey != "",
+		"ai_model": a.cfg.AIModel, "ai_base_url": a.cfg.AIBaseURL, "has_ai_key": a.cfg.AIKey != "",
 	})
 }
 
 type configReq struct {
-	DBPath   string `json:"db_path"`
-	FontPath string `json:"font_path"`
-	AIKey    string `json:"ai_key"`
-	AIModel  string `json:"ai_model"`
+	DBPath    string `json:"db_path"`
+	FontPath  string `json:"font_path"`
+	AIKey     string `json:"ai_key"`
+	AIModel   string `json:"ai_model"`
+	AIBaseURL string `json:"ai_base_url"`
 }
 
 func (a *api) putConfig(w http.ResponseWriter, r *http.Request) {
@@ -709,6 +891,9 @@ func (a *api) putConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AIModel != "" {
 		a.cfg.AIModel = req.AIModel
+	}
+	if req.AIBaseURL != "" {
+		a.cfg.AIBaseURL = req.AIBaseURL
 	}
 	if err := a.cfg.Save(); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())

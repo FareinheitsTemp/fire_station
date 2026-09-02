@@ -10,6 +10,7 @@ const NAMES = {
   'new-call': 'Новий виклик',
   reports: 'Звіти',
   ai: 'AI-асистент',
+  agent: 'Агент',
   settings: 'Налаштування',
 }
 
