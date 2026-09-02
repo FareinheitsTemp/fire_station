@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 
 const items = [
   ['/', 'Огляд'],
+  ['/structure', 'Структура'],
   ['/tables', 'Таблиці'],
   ['/new-call', 'Новий виклик'],
   ['/reports', 'Звіти'],
@@ -12,6 +13,8 @@ const items = [
 
 export default function Layout({ children }) {
   const { pathname } = useRouter()
+  const isActive = (href) =>
+    href === '/' ? pathname === '/' : pathname.startsWith(href)
   return (
     <div className="layout">
       <aside className="layout__sidebar">
@@ -21,7 +24,7 @@ export default function Layout({ children }) {
             <Link
               key={href}
               href={href}
-              className={`nav__link${pathname === href ? ' nav__link--active' : ''}`}
+              className={`nav__link${isActive(href) ? ' nav__link--active' : ''}`}
             >
               {label}
             </Link>

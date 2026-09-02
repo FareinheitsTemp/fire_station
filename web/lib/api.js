@@ -22,3 +22,5 @@ export const put = (path, body) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+
+export const del = (path) => req(path, { method: 'DELETE' })

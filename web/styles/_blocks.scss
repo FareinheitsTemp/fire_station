@@ -149,9 +149,11 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-width: 420px;
+  max-width: 460px;
 
   &__item {
+    display: flex;
+    align-items: center;
     padding: 10px 14px;
     border: 1px solid $border;
     border-radius: $radius;
@@ -161,6 +163,15 @@
       font-weight: 600;
     }
   }
+}
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 10px;
+  flex-shrink: 0;
 }
 
 // .table-wrap + .table — таблиці даних
@@ -192,6 +203,35 @@
   tbody tr:hover {
     background: $surface;
   }
+
+  &__actions {
+    white-space: nowrap;
+  }
+}
+
+// .toolbar — панель дій над таблицею
+.toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+// .icon-btn — малі кнопки дій у рядку таблиці
+.icon-btn {
+  border: 1px solid $border;
+  background: $bg;
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 13px;
+
+  &:hover {
+    background: $surface;
+  }
+
+  &--danger:hover {
+    border-color: $err;
+  }
 }
 
 // .form — форми
@@ -202,13 +242,23 @@
   max-width: 520px;
   margin-bottom: 20px;
 
+  &--panel {
+    border: 1px solid $border;
+    border-radius: $radius;
+    background: $surface;
+    padding: 20px;
+  }
+
   &__label {
     font-size: 13px;
     color: $muted;
     margin-top: 6px;
+    display: block;
+    margin-bottom: 4px;
   }
 
   &__input {
+    width: 100%;
     padding: 9px 12px;
     border: 1px solid $border;
     border-radius: $radius;
@@ -220,12 +270,17 @@
       outline-offset: -1px;
     }
   }
+
+  &__actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+  }
 }
 
 // .btn — кнопки
 .btn {
   align-self: flex-start;
-  margin-top: 10px;
   padding: 10px 22px;
   border: 1px solid $text;
   border-radius: $radius;
@@ -263,6 +318,72 @@
     border-color: $ok;
     background: $ok-bg;
     color: $ok;
+  }
+}
+
+// .node-graph — інтерактивний граф структури БД
+.node-graph {
+  width: 100%;
+  height: auto;
+  border: 1px solid $border;
+  border-radius: $radius;
+  background: $surface;
+
+  &__core rect {
+    fill: $text;
+  }
+
+  &__core text {
+    fill: $bg;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  &__node {
+    cursor: pointer;
+
+    rect {
+      fill: $bg;
+      stroke-width: 2;
+    }
+
+    &:hover rect {
+      filter: brightness(0.96);
+    }
+  }
+
+  &__label {
+    font-size: 13px;
+    font-weight: 600;
+    fill: $text;
+  }
+
+  &__name {
+    font-size: 11px;
+    fill: $muted;
+  }
+}
+
+// .notfound — кастомна 404
+.notfound {
+  text-align: center;
+  padding: 90px 20px;
+
+  &__code {
+    font-size: 96px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 4px;
+  }
+
+  &__title {
+    margin: 12px 0 8px;
+    font-size: 22px;
+  }
+
+  .btn {
+    margin-top: 18px;
+    display: inline-block;
   }
 }
 

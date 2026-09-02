@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,8 +19,8 @@ import (
 	"github.com/FareinheitsTemp/fire_station/internal/report"
 )
 
-// API-сервер АІС: віддає JSON-ендпоінти для веб-фронтенду (Next.js).
-// Бекенд — консольний процес; UI повністю у браузері.
+// API-сервер АІС: міст між веб-фронтендом (Next.js) і БД Access.
+// Усі помилки ловляться й повертаються як JSON {error: ...}.
 
 type api struct {
 	cfg   *config.Config
@@ -46,8 +48,13 @@ func Run(cfg *config.Config) error {
 	mux.HandleFunc("GET /api/health", a.health)
 	mux.HandleFunc("GET /api/stats", a.stats)
 	mux.HandleFunc("GET /api/recent", a.recent)
+	mux.HandleFunc("GET /api/meta", a.metaList)
+	mux.HandleFunc("GET /api/ref/{table}", a.refList)
 	mux.HandleFunc("GET /api/tables", a.tables)
 	mux.HandleFunc("GET /api/tables/{name}", a.table)
+	mux.HandleFunc("POST /api/tables/{name}/rows", a.insertRow)
+	mux.HandleFunc("PUT /api/tables/{name}/rows/{id}", a.updateRow)
+	mux.HandleFunc("DELETE /api/tables/{name}/rows/{id}", a.deleteRow)
 	mux.HandleFunc("GET /api/fire-types", a.fireTypes)
 	mux.HandleFunc("POST /api/calls", a.createCall)
 	mux.HandleFunc("POST /api/reports/calls", a.reportCalls)
@@ -62,7 +69,31 @@ func Run(cfg *config.Config) error {
 	if a.dbErr != nil {
 		fmt.Println("УВАГА: БД недоступна:", a.dbErr)
 	}
-	return http.ListenAndServe(addr, mux)
+	return http.ListenAndServe(addr, withLogging(withRecover(mux)))
+}
+
+// --- middleware ---
+
+// withRecover ловить паніку в хендлері й відповідає JSON 500 замість падіння.
+func withRecover(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("[panic] %s %s: %v", r.Method, r.URL.Path, rec)
+				writeErr(w, http.StatusInternalServerError, "внутрішня помилка сервера")
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// withLogging пише в консоль кожен запит: метод, шлях, тривалість.
+func withLogging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("%s %s (%s)", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
+	})
 }
 
 // --- helpers ---
@@ -140,7 +171,79 @@ func scanRows(rows *sql.Rows) ([]string, [][]string, error) {
 	return cols, data, rows.Err()
 }
 
-// --- handlers ---
+var dateLayouts = []string{"2006-01-02", "2006-01-02 15:04", "2006-01-02T15:04", "02.01.2006 15:04", time.RFC3339}
+
+// rowValues валідує значення за метаданими й конвертує у типи Access.
+func rowValues(tm db.TableMeta, vals map[string]string) ([]string, []any, error) {
+	known := map[string]bool{}
+	for _, c := range tm.Columns {
+		known[c.Name] = true
+	}
+	for k := range vals {
+		if !known[k] {
+			return nil, nil, fmt.Errorf("невідома колонка: %s", k)
+		}
+	}
+	var cols []string
+	var args []any
+	for _, c := range tm.Columns {
+		raw, present := vals[c.Name]
+		raw = strings.TrimSpace(raw)
+		if c.Required && raw == "" {
+			return nil, nil, fmt.Errorf("обов'язкове поле: %s", c.Label)
+		}
+		if !present || raw == "" {
+			continue // лишаємо NULL/дефолт
+		}
+		var v any
+		var err error
+		switch c.Type {
+		case "number":
+			v, err = strconv.ParseFloat(strings.ReplaceAll(raw, ",", "."), 64)
+		case "ref":
+			v, err = strconv.ParseInt(raw, 10, 64)
+		case "bool":
+			l := strings.ToLower(raw)
+			if l == "1" || l == "true" || l == "так" {
+				v = 1
+			} else {
+				v = 0
+			}
+		case "date":
+			for _, layout := range dateLayouts {
+				if t, perr := time.ParseInLocation(layout, raw, time.Local); perr == nil {
+					v = t
+					break
+				}
+			}
+			if v == nil {
+				err = fmt.Errorf("невірна дата: %s", raw)
+			}
+		case "select":
+			okOpt := false
+			for _, o := range c.Options {
+				if o == raw {
+					okOpt = true
+				}
+			}
+			if !okOpt {
+				err = fmt.Errorf("недопустиме значення %q", raw)
+			} else {
+				v = raw
+			}
+		default:
+			v = raw
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s: %v", c.Label, err)
+		}
+		cols = append(cols, c.Name)
+		args = append(args, v)
+	}
+	return cols, args, nil
+}
+
+// --- базові handlers ---
 
 func (a *api) health(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{"ok": true, "db": a.store != nil}
@@ -172,6 +275,37 @@ func (a *api) recent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+func (a *api) metaList(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, db.TablesMeta())
+}
+
+func (a *api) refList(w http.ResponseWriter, r *http.Request) {
+	if !a.dbOK(w) {
+		return
+	}
+	tm, ok := db.TableMetaByName(r.PathValue("table"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, "невідома таблиця")
+		return
+	}
+	rows, err := a.store.Query(r.Context(), fmt.Sprintf("SELECT TOP 500 [%s], [%s] FROM [%s]", tm.PK, tm.LabelCol, tm.Name))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer rows.Close()
+	_, data, err := scanRows(rows)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := make([]map[string]string, len(data))
+	for i, row := range data {
+		out[i] = map[string]string{"id": row[0], "label": row[1]}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (a *api) tables(w http.ResponseWriter, r *http.Request) {
@@ -206,6 +340,107 @@ func (a *api) table(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"columns": cols, "rows": data})
 }
+
+// --- CRUD ---
+
+type rowReq struct {
+	Values map[string]string `json:"values"`
+}
+
+func (a *api) insertRow(w http.ResponseWriter, r *http.Request) {
+	if !a.dbOK(w) {
+		return
+	}
+	tm, ok := db.TableMetaByName(r.PathValue("name"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, "невідома таблиця")
+		return
+	}
+	var req rowReq
+	if !decode(w, r, &req) {
+		return
+	}
+	cols, args, err := rowValues(tm, req.Values)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(cols) == 0 {
+		writeErr(w, http.StatusBadRequest, "немає даних для вставки")
+		return
+	}
+	q := fmt.Sprintf("INSERT INTO [%s] ([%s]) VALUES (%s)",
+		tm.Name, strings.Join(cols, "],["), strings.TrimSuffix(strings.Repeat("?,", len(cols)), ","))
+	if _, err := a.store.Exec(q, args...); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (a *api) updateRow(w http.ResponseWriter, r *http.Request) {
+	if !a.dbOK(w) {
+		return
+	}
+	tm, ok := db.TableMetaByName(r.PathValue("name"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, "невідома таблиця")
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "невірний id")
+		return
+	}
+	var req rowReq
+	if !decode(w, r, &req) {
+		return
+	}
+	cols, args, err := rowValues(tm, req.Values)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(cols) == 0 {
+		writeErr(w, http.StatusBadRequest, "немає даних для оновлення")
+		return
+	}
+	set := make([]string, len(cols))
+	for i, c := range cols {
+		set[i] = "[" + c + "] = ?"
+	}
+	args = append(args, id)
+	q := fmt.Sprintf("UPDATE [%s] SET %s WHERE [%s] = ?", tm.Name, strings.Join(set, ", "), tm.PK)
+	if _, err := a.store.Exec(q, args...); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (a *api) deleteRow(w http.ResponseWriter, r *http.Request) {
+	if !a.dbOK(w) {
+		return
+	}
+	tm, ok := db.TableMetaByName(r.PathValue("name"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, "невідома таблиця")
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "невірний id")
+		return
+	}
+	q := fmt.Sprintf("DELETE FROM [%s] WHERE [%s] = ?", tm.Name, tm.PK)
+	if _, err := a.store.Exec(q, id); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// --- довідники, виклики, звіти, ШІ, конфіг ---
 
 func (a *api) fireTypes(w http.ResponseWriter, r *http.Request) {
 	if !a.dbOK(w) {

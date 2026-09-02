@@ -2,13 +2,14 @@
 
 Курсова робота з дисципліни «Бази даних»: автоматизована інформаційна система пожежної частини.
 
-Go + MS Access (.accdb через ODBC) — бекенд (консольний API-сервер) · React + Next.js + SCSS (BEM) — веб-інтерфейс · ШІ-асистент (aimlapi) · PDF-звіти.
+Go (консольний API-сервер, міст до MS Access через ODBC) · React + Next.js + SCSS (BEM) — веб-інтерфейс · ШІ-асистент (aimlapi) · PDF-звіти.
 
 ## Архітектура
 
 ```
 fire-station.exe   консольний API-сервер http://localhost:8080
-                   (БД Access через ODBC, PDF-звіти, ШІ)
+                   (БД Access через ODBC, CRUD, PDF-звіти, ШІ;
+                    логування запитів + recover від панік)
 web/ (Next.js)     веб-інтерфейс http://localhost:3000
                    (proxy /api/* → localhost:8080)
 ```
@@ -16,13 +17,15 @@ web/ (Next.js)     веб-інтерфейс http://localhost:3000
 ## Сторінки
 
 - **Огляд** — дашборд: виклики, активний склад, техніка в строю, останні виклики зі статусами
-- **Таблиці** — браузер усіх 12 таблиць БД
-- **Новий виклик** — форма з випадайкою типу пожежі
+- **Структура** — інтерактивний нод-граф БД: ядро + 12 нод-таблиць, кольорові гілки, пунктирні FK-зв'язки; клік по ноді відкриває таблицю
+- **Таблиці** — браузер усіх 12 таблиць з повним CRUD (додати / редагувати / видалити запис; форми з календариками, випадайками статусів і селектами довідників)
+- **Новий виклик** — швидка форма реєстрації
 - **Звіти** — PDF «Виклики за період» зі скачуванням
 - **AI-асистент** — запит українською → SQL (Access) → таблиця (лише SELECT)
 - **Налаштування** — шлях БД, шрифт, ключ ШІ
+- **404** — власна сторінка для неіснуючих маршрутів
 
-Дизайн: монохромний білий; зелений/жовтий/червоний — лише статуси («в строю»/«в роботі»/«новий»).
+Дизайн: монохромний білий; колір — семантика станів і гілок графа.
 
 ## Вимоги (одноразово)
 
@@ -51,26 +54,23 @@ npm run dev
 ```
 
 Відкрити [http://localhost:3000](http://localhost:3000).
-
 Продакшн-режим фронтенду: `npm run build` і далі `npm start`.
-Стара консольна версія (TUI) лишається: `./fire-station.exe tui`.
 
 Першим запуском бекенд сам створить `data/fire_station.accdb` поруч з exe, схему (12 таблиць) і демо-дані.
 
-## Структура
+## Структура проєкту
 
 ```
 cmd/
-  webapi/       JSON API-сервер (net/http, Go 1.22 routing)
-  tui/          Консольний TUI (Bubble Tea) — альтернативний інтерфейс
+  webapi/       JSON API-сервер (net/http, Go 1.22 routing, middleware)
 internal/
-  db/           ODBC-підключення до .accdb, схема, демо-дані, запити, статистика
+  db/           ODBC-підключення, схема, демо-дані, запити, статистика, метадані таблиць
   report/       Генерація PDF (gofpdf)
   ai/           Клієнт aimlapi: NL→SQL з політикою безпеки
   config/       Конфіг користувача (0600)
 web/            Next.js фронтенд (React, pages router)
-  pages/        Сторінки: огляд, таблиці, новий виклик, звіти, AI, налаштування
-  components/   Layout, StatusBadge, DataTable
+  pages/        Огляд, Структура, Таблиці (CRUD), Новий виклик, Звіти, AI, Налаштування, 404
+  components/   Layout, NodeGraph, RecordForm, DataTable, StatusBadge
   styles/       SCSS за BEM: variables + blocks
 assets/fonts/   Сюди покласти DejaVuSans.ttf
 data/           Файл БД (створюється автоматично поруч з exe)
@@ -80,17 +80,22 @@ reports/        Згенеровані PDF (поруч з exe)
 ## API (бекенд)
 
 ```
-GET  /api/health               стан сервера і БД
-GET  /api/stats                статистика дашборду
-GET  /api/recent               останні виклики
-GET  /api/tables               список таблиць
-GET  /api/tables/{name}        вміст таблиці (TOP 500)
-GET  /api/fire-types           довідник типів пожеж
-POST /api/calls                реєстрація виклику
-POST /api/reports/calls        PDF-звіт {from, to} → {file}
-GET  /api/reports/file/{name}  скачування PDF
-POST /api/ai                   запит до ШІ {question} → {sql, columns, rows}
-GET/PUT /api/config            налаштування
+GET    /api/health                 стан сервера і БД
+GET    /api/stats                  статистика дашборду
+GET    /api/recent                 останні виклики
+GET    /api/meta                   метадані таблиць (поля, типи, довідники, кольори)
+GET    /api/ref/{table}            довідник [{id, label}] для селектів
+GET    /api/tables                 список таблиць
+GET    /api/tables/{name}          вміст таблиці (TOP 500)
+POST   /api/tables/{name}/rows     створити запис {values}
+PUT    /api/tables/{name}/rows/{id}   оновити запис {values}
+DELETE /api/tables/{name}/rows/{id}   видалити запис
+GET    /api/fire-types             довідник типів пожеж
+POST   /api/calls                  реєстрація виклику
+POST   /api/reports/calls          PDF-звіт {from, to} → {file}
+GET    /api/reports/file/{name}    скачування PDF
+POST   /api/ai                     запит до ШІ {question} → {sql, columns, rows}
+GET/PUT /api/config                налаштування
 ```
 
 ## Модель даних (12 таблиць)
@@ -98,4 +103,4 @@ GET/PUT /api/config            налаштування
 positions, shifts, employees, employee_shifts, equipment, equipment_checks,
 fire_types, calls, dispatches, dispatch_crew, dispatch_equipment, damages
 
-Деталі — `internal/db/schema.go`.
+Деталі — `internal/db/schema.go`, метадані для UI — `internal/db/meta.go`.

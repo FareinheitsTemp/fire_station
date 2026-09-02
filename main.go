@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/FareinheitsTemp/fire_station/cmd/tui"
 	"github.com/FareinheitsTemp/fire_station/cmd/webapi"
 	"github.com/FareinheitsTemp/fire_station/internal/config"
 	"github.com/spf13/cobra"
@@ -44,24 +43,16 @@ func main() {
 
 	root := &cobra.Command{
 		Use:   "fire-station",
-		Short: "АІС «Пожежна частина»",
+		Short: "АІС «Пожежна частина» — консольний API-сервер (міст між вебом і Access)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return webapi.Run(apply())
 		},
 	}
-	tuiCmd := &cobra.Command{
-		Use:   "tui",
-		Short: "Запустити консольний інтерфейс (TUI)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return tui.Run(apply())
-		},
-	}
 
-	root.PersistentFlags().StringVar(&flagDB, "db", "", "шлях до файлу БД (.accdb)")
-	root.PersistentFlags().StringVar(&flagFont, "font", "", "шлях до TTF-шрифту для PDF")
-	root.PersistentFlags().StringVar(&flagAIKey, "ai-key", "", "API ключ aimlapi")
-	root.PersistentFlags().StringVar(&flagAIModel, "ai-model", "", "модель ШІ")
-	root.AddCommand(tuiCmd)
+	root.Flags().StringVar(&flagDB, "db", "", "шлях до файлу БД (.accdb)")
+	root.Flags().StringVar(&flagFont, "font", "", "шлях до TTF-шрифту для PDF")
+	root.Flags().StringVar(&flagAIKey, "ai-key", "", "API ключ aimlapi")
+	root.Flags().StringVar(&flagAIModel, "ai-model", "", "модель ШІ")
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "Помилка:", err)
